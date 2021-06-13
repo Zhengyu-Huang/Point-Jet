@@ -24,7 +24,7 @@ const fid = open(dataf, "r")
 relax, beta, widthx, widthy, ubar, dt_diag, dt_chkpt, alpha, dt, nvisc, nkx, nky, nx, ny, n_tracers = load_pars(fid)
 
 # for filting
-wn = wavnum_init()
+wn = Wavenumbers(param)()
 
 # domain
 x = zeros(nx, 1)
@@ -40,15 +40,15 @@ plot_type = "cond"
 
 if plot_type == "rel. vort."
     grelvort = zeros(nx, ny)
-    ph, ax = init_plot(grelvort, "RdBu_r")
+    ph, ax = init_plot(x, y, grelvort, "RdBu_r")
     img_name = "relvor"
 elseif plot_type == "cond"    
     cond = zeros(nx, ny)
-    ph, ax = init_plot(cond, "viridis")
+    ph, ax = init_plot(x, y, cond, "viridis")
     img_name = "cond"
 elseif plot_type == "q"    
     gwater = zeros(nx, ny)
-    ph, ax = init_plot(gwater, "viridis")
+    ph, ax = init_plot(x, y, gwater, "viridis")
     ph.set_clim(vmin=0, vmax=0.8)
     img_name = "q"
 elseif plot_type == "zonal mean q"    

@@ -4,74 +4,76 @@ using Base: Float64, Int64
 ################################################################################
 
 using Printf, PyPlot, LinearAlgebra, Random
-# plt.style.use("~/presentation_plots.mplstyle")
 close("all")
-
-# load useful functions/structs
 include("helper_functions.jl")
 include("struct_defs.jl")
-
-
 Random.seed!(123);
+
+
 ################################################################################
 # integrate model
 ################################################################################
 
-param = Param()
+
+function Barotropic()
+relax, beta, alpha = 0.02, 0.0, 2.0
+widthx, widthy = 8*pi, 4*pi 
+ubar = 0.0 
+t_max, dt_diag, dt_chkpt = 10.0, 0.5, 25.0 
+nkx = 2^6
+n_tracers, i_water = 2, 2
+init = true
+fdir = "./data/"
+
+param = Param(relax=relax, beta=beta, alpha=alpha, 
+              widthx=widthx, widthy=widthy, ubar=ubar,
+              t_max=t_max, dt_diag=dt_diag, dt_chkpt=dt_chkpt,
+              nkx=nkx, n_tracers = n_tracers, 
+              init = init, fdir=fdir)
+
+nky, nx, ny = param.nky, param.nx, param.ny
+dataf = param.dataf
+dt = param.dt
+nvisc = param.nvisc
+
 # initialize wavenumbers
-wavnum = wavnum_init(param)
-
+wavnum = Wavenumbers(param)
+x, y = wavnum.x, wavnum.y
 # initialize forcing
-gvort_jet = forcing_init(wavnum, "point_jet")
-
+gvort_jet = forcing_init(param, wavnum, "point_jet") #"2_gaussian_jets")
 # initialize stirring
 stirring = stirring_init(param, wavnum)
 
-init, dataf = param.init, param.dataf
-x, y = param.x, param.y
-
-
-relax, beta, widthx, widthy, ubar, dt_diag, dt_chkpt, alpha, dt, nvisc, nkx, nky, nx, ny, n_tracers = 
-param.relax, param.beta, param.widthx, param.widthy, param.ubar, param.dt_diag, param.dt_chkpt, param.alpha, param.dt, param.nvisc, param.nkx, param.nky, param.nx, param.ny, param.n_tracers
-t_max = param.t_max
 
 # initialize or load data
 if init
     println("\nStarting integration from background state.")
 
-    if isfile(dataf)
-        error(string("File ", dataf, " already exists.")) 
-    else
-        const fid = open(dataf, "w")
-        println(string("\nWriting data file:    ", dataf))
-    end
+    # if isfile(dataf)
+    #     error(string("File ", dataf, " already exists.")) 
+    # else
+    #     const fid = open(dataf, "w")
+    #     println(string("\nWriting data file:    ", dataf))
+    # end
+    fid = open(dataf, "w")
+    println(string("\nWriting data file:    ", dataf))
 
     # allocate memory for relative vorticity and tracers, their time 
     # tendencies (at 3 time leves), and their forcings
-    const i_water = 2
     wtracers = complex(zeros(n_tracers, nkx, nky))
     wtracer_tends = complex(zeros(n_tracers, 3, nkx, nky))
     gforcings = zeros(n_tracers, nx, ny)
-
-    # initialize relative vorticity
-    grelvor = gvort_jet
-    #= wtracers[1, :, :] = wfft2(grelvor, nkx, nky) =#
-    #= wtracers[1, :, :] = zeros(nkx, nky) =#
-    #= xx = repeat(x, 1, ny) =#
-    #= yy = repeat(y, nx, 1) =#
-    #= grelvor = @. exp(-((xx - 4*widthx/9)^2 + yy^2)) - exp(-((xx - 5*widthx/9)^2 + yy^2)) =#
-    #= wtracers[1, :, :] = wfft2(grelvor, nkx, nky) =#
-
-    # initialize water vapor
-    const qsat = repeat(saturation_fn(param,wavnum, y), nx, 1)
+    
+    # initialize water vapor in grid space
+    qsat = repeat(saturation_fn(param,wavnum, y), nx, 1)
      
 
-    const rel_hum = 0.9
+    rel_hum = 0.9
     gwater = rel_hum*qsat
     wtracers[i_water, :, :] = wfft2(gwater, nkx, nky)
      
 
-    # water vapor forcing: evaporation
+    # water vapor forcing: evaporation rate
     gforcings[i_water, :, :] = repeat(evap_fn(param, wavnum, y), nx, 1)
      
 
@@ -83,7 +85,7 @@ if init
     tlev = [1 2 3]
     t = [0]
 
-    model = Model(wavnum, forcing, stirring, wtracers, wtracer_tends, tlev, t)
+    model = Model(param, wavnum, forcing, stirring, wtracers, wtracer_tends, tlev, t)
 
     # write important parameters and initial state to snapshot file
     write(fid, relax)
@@ -101,6 +103,8 @@ if init
     write(fid, nx) 
     write(fid, ny)
     write(fid, n_tracers)
+
+    # todo what is cond
     cond = zeros(nx, ny)
     snapshot(fid, model, cond)
     t_last_diag = model.t[1]
@@ -112,12 +116,12 @@ if init
     # start integration with one forward step ...
     take_step(model, "single")
     # condense water
-    model.wtracers[i_water, :, :], cond = condense(model.wtracers[i_water, :, :])
+    model.wtracers[i_water, :, :], cond = condense(wavnum, model.wtracers[i_water, :, :], qsat)
 
     # ... and one AB2 step
     take_step(model, "AB2")
     # condense water
-    model.wtracers[i_water, :, :], cond = condense(model.wtracers[i_water, :, :])
+    model.wtracers[i_water, :, :], cond = condense(wavnum, model.wtracers[i_water, :, :], qsat)
 else
     error("Restart not supported.")
     #= if isfile(string(fnbase, ".h5")) =#
@@ -140,12 +144,12 @@ plot_type = "cond"
 
 if plot_type == "rel. vort."
     grelvort = gfft2(model.wtracers[1, :, :], nx, ny)
-    ph, ax = init_plot(grelvort, "RdBu_r")
+    ph, ax = init_plot(x, y, grelvort, "RdBu_r")
 elseif plot_type == "cond"    
-    ph, ax = init_plot(cond, "viridis")
+    ph, ax = init_plot(x, y, cond, "viridis")
 elseif plot_type == "q"    
     gwater = gfft2(model.wtracers[i_water, :, :], nx, ny)
-    ph, ax = init_plot(gwater, "viridis")
+    ph, ax = init_plot(x, y, gwater, "viridis")
     ph.set_clim(vmin=0, vmax=0.8)
 elseif plot_type == "zonal mean q"    
     fig, ax = subplots(1)
@@ -166,12 +170,12 @@ println(@sprintf("\tdt    = %10.3e", dt))
 println(@sprintf("\tt_max = %6.1f", t_max))
 println(@sprintf("\nStarting integration..."))
 while model.t[1] < t_max
-    global t_last_diag
+    # global t_last_diag
 
     # take a time step
     take_step(model, "AB3")
     # condense water
-    model.wtracers[i_water, :, :], cond = condense(model.wtracers[i_water, :, :])
+    model.wtracers[i_water, :, :], cond = condense(wavnum, model.wtracers[i_water, :, :], qsat)
     @info norm(model.wtracers)
     @assert(norm(model.wtracers) ≈ 17244.85817005311)
     error("successful")
@@ -240,3 +244,6 @@ close(fid)
 ################################################################################
 # end
 ################################################################################
+end
+
+Barotropic()

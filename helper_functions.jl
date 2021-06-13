@@ -5,40 +5,7 @@ using FFTW, HDF5, PyPlot, Printf
 
 include("struct_defs.jl")
 
-function wavnum_init(param::Param)
-#WAVNUM_INIT   Initialize wavenumber fields.
-    nx, ny, nkx, nky = param.nx, param.ny, param.nkx, param.nky
-    widthx, widthy = param.widthx, param.widthy
-    alpha, nvisc = param.alpha, param.nvisc
 
-    # initialize output
-    kx = zeros(nkx, 1)
-    ky = zeros(1, nky)
-    kalpha = zeros(nkx, nky)
-    
-    # spacing of wavenumber grid
-    delkx = 2*pi/widthx
-    delky = 2*pi/widthy
-    
-    # x- and y-wavenumbers
-    kx[:, 1] = (0:nkx-1)*delkx
-    ky[1, :] = vcat(0:ceil(nky/2)-1, -floor(nky/2):-1)'*delky
-    
-    # determine kalpha such that 
-    #     FT(advected variable) = -(kalpha) * FT(streamfunction)
-    kxy2 = repeat(kx.^2, 1, nky) + repeat(ky.^2, nkx, 1)
-    idx = kxy2 .> eps()
-    kalpha[idx] = kxy2[idx].^(-alpha/2)
-    
-    # spectral damping (numerical dissipation)
-    hyperdiff = nvisc*(kxy2/maximum(kxy2)).^4
-    diff = sqrt(nvisc)*(kxy2/maximum(kxy2)).^2
-
-    # save as struct
-    wn = Wavenumbers(nx, ny, kx, ky, kalpha, hyperdiff, diff)
-
-    return wn
-end
 
 function wfft2(gfield, nkx, nky)
 #WFFT2   Grid-to-wave Fourier transform 
@@ -99,6 +66,7 @@ end
 Filter a physical field by transforming it to wavenumber space and back.
 """
 function filter(wn, gfield)
+    nky, ny = length(wn.ky), length(wn.y)
     # spectral filtering 
     filter = 1 .- abs.(wn.ky/maximum(wn.ky))
     #= filter = ones(size(wn.ky)) =#
@@ -108,10 +76,11 @@ function filter(wn, gfield)
     return gfield
 end
 
-function forcing_init(wn, type = "point_jet")
+function forcing_init(param, wn, type = "point_jet")
     #FORCING_INIT   Initialize forcing.
-    nx, ny = wn.nx, wn.ny
-    
+    x, y = wn.x, wn.y
+    nx, ny = length(wn.x), length(wn.y)
+    jet_width, widthy = param.jet_width, param.widthy
     # vorticity of jet 
     gvort_jet = zeros(1, ny)
     kx, ky = wn.kx, wn.ky
@@ -254,6 +223,11 @@ function get_wtracer_tends(m::Model)
 #      of the tracer c in Fourier space. 
   
     # streamfunction (relvor is i=1)
+
+    nx, ny = m.param.nx, m.param.ny
+    nkx, nky = m.param.nkx, m.param.nky
+    beta, ubar = m.param.beta, m.param.ubar
+
     wpsi = -m.wavnum.kalpha.*m.wtracers[1, :, :]
 
     # loop through all the tracers
@@ -304,7 +278,7 @@ function stirring_init(param::Param, wn)
 #WSTIRRING_INIT   Initialize stochastic stirring forcing.
     dt, jet_width = param.dt, param.jet_width
     widthx, widthy = param.widthx, param.widthy
-    x, y = param.x, param.y
+    x, y = wn.x, wn.y
     nx, ny = length(x), length(y)
     nkx, nky = length(wn.kx), length(wn.ky)
     # decorrelation time 
@@ -360,7 +334,10 @@ function update_wstir(m::Model)
 #       sp:    the stirring parameter struct
 #       wstir: the stirring forcing from the previous timestep in wavenumber
 #              space
- 
+    
+    nkx, nky = m.param.nkx, m.param.nky
+    nx, ny = m.param.nx, m.param.ny
+
     m.stirring.wstir[:, :] = m.stirring.a*m.stirring.variance*randn(nkx, nky) + m.stirring.b*m.stirring.wstir
     m.stirring.wstir[:, :] .*= m.stirring.wavnums_mask
     gstir = gfft2(m.stirring.wstir, nx, ny)
@@ -507,7 +484,8 @@ function take_step(m::Model, step_type)
         stepper = step_ab3t
         dt_factor = 1
     end
-
+    nx, ny, dt = m.param.nx, m.param.ny, m.param.dt
+    relax = m.param.relax
     # update relvor forcing
     m.forcing.gforcings[1, :, :] = relax*(m.forcing.gvort_jet - gfft2(m.wtracers[1, :, :], nx, ny))
     
@@ -660,7 +638,8 @@ Applies instantaneous condensation. Given water vapor state in wavenumber space,
 removes `cond` from water vapor state in physical space where q - qsat > 0. Returns new
 water vapor state.
 """
-function condense(wwater)
+function condense(wn, wwater, qsat)
+    nx, ny, nkx, nky = length(wn.x), length(wn.y), length(wn.kx), length(wn.ky)
     gwater = gfft2(wwater, nx, ny)
     cond = gwater .- qsat
     cond[cond .< 0.0] .= 0.0
@@ -670,12 +649,12 @@ function condense(wwater)
 end
 
 """
-    ph, ax = init_plot(field, cmap)
+    ph, ax = init_plot(x, y, field, cmap)
 
 Begin a plot of 2D `field` for animations. Uses colormap `cmap` and returns plot handle `ph` and 
 axis `ax`.
 """
-function init_plot(field, cmap)
+function init_plot(x, y, field, cmap)
     fig, ax = subplots(1)
     ph = ax.pcolormesh(x[:, 1], y[1, :], field', cmap=cmap)
     colorbar(ph, ax=ax)

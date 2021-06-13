@@ -29,9 +29,7 @@ mutable struct Param
 
     nx::Int64        # dimension of fields in grid space (large enough to ensure unaliased products)
     ny::Int64 
-    # domain (useful for plotting and defining forcings)
-    x::Array{Float64, 2}
-    y::Array{Float64, 2}
+    
     
     
     # Time info
@@ -97,14 +95,11 @@ function Param(;relax = 0.02, beta = 0.0, alpha = 2.0, n_tracers = 2,
     
     nx = Int64(round(3/2*maximum([nkx, nky])))
     ny = nx
-    x = zeros(nx, 1)
-    y = zeros(1, ny)
-    x[:, 1] = (0:1.0/(nx-1):1.0)*widthx
-    y[1, :] = (-0.5:1.0/(ny-1):0.5)*widthy
+    
     
     return Param(relax, beta, alpha, n_tracers, jet_width, ubar, nvisc,
     deltaT, alpha_qsat, alpha_evap, 
-    widthx, widthy, nkx, nky, nx, ny, x, y,
+    widthx, widthy, nkx, nky, nx, ny,
     t_max, dt_diag, dt_chkpt, dt, 
     init, fdir, fnam, fnbase, dataf)
     
@@ -123,14 +118,55 @@ Wavenumbers
 This struct holds arrays useful for computations in wavenumber space.
 """
 struct Wavenumbers
-    nx::Int64
-    ny::Int64
+    # domain (useful for plotting and defining forcings)
+    x::Array{Float64}
+    y::Array{Float64}
     kx::Array{Float64}
     ky::Array{Float64}
     kalpha::Array{Float64}
     hyperdiff::Array{Float64}
     diff::Array{Float64}
 end
+
+
+function Wavenumbers(param::Param)
+    #WAVNUM_INIT   Initialize wavenumber fields.
+        nx, ny, nkx, nky = param.nx, param.ny, param.nkx, param.nky
+        widthx, widthy = param.widthx, param.widthy
+        alpha, nvisc = param.alpha, param.nvisc
+
+        x = zeros(nx, 1)
+        y = zeros(1, ny)
+        x[:, 1] .= (0:1.0/(nx-1):1.0)*widthx
+        y[1, :] .= (-0.5:1.0/(ny-1):0.5)*widthy
+    
+        # initialize output
+        kx = zeros(nkx, 1)
+        ky = zeros(1, nky)
+        kalpha = zeros(nkx, nky)
+        
+        # spacing of wavenumber grid
+        delkx = 2*pi/widthx
+        delky = 2*pi/widthy
+        
+        # x- and y-wavenumbers
+        kx[:, 1] = (0:nkx-1)*delkx
+        ky[1, :] = vcat(0:ceil(nky/2)-1, -floor(nky/2):-1)'*delky
+        
+        # determine kalpha such that 
+        #     FT(advected variable) = -(kalpha) * FT(streamfunction)
+        # kx^2 + ky^2
+        kxy2 = repeat(kx.^2, 1, nky) + repeat(ky.^2, nkx, 1)
+        idx = kxy2 .> eps()
+        kalpha[idx] = kxy2[idx].^(-alpha/2)
+        
+        # spectral damping (numerical dissipation)
+        hyperdiff = nvisc*(kxy2/maximum(kxy2)).^4
+        diff = sqrt(nvisc)*(kxy2/maximum(kxy2)).^2
+    
+        # save as struct
+        Wavenumbers(x, y, kx, ky, kalpha, hyperdiff, diff)
+    end
 
 """
 Forcing
@@ -164,6 +200,7 @@ This struct wraps the other structs together and contains arrays describing the
 state of the model at time `t`.
 """
 struct Model
+    param::Param
     wavnum::Wavenumbers
     forcing::Forcing
     stirring::Stirring
