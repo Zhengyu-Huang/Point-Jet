@@ -49,14 +49,14 @@ stirring = stirring_init(param, wavnum)
 if init
     println("\nStarting integration from background state.")
 
-    # if isfile(dataf)
-    #     error(string("File ", dataf, " already exists.")) 
-    # else
-    #     const fid = open(dataf, "w")
-    #     println(string("\nWriting data file:    ", dataf))
-    # end
-    fid = open(dataf, "w")
-    println(string("\nWriting data file:    ", dataf))
+    if isfile(dataf)
+        error(string("File ", dataf, " already exists.")) 
+    else
+        fid = open(dataf, "w")
+        println(string("\nWriting data file:    ", dataf))
+    end
+    # fid = open(dataf, "w")
+    # println(string("\nWriting data file:    ", dataf))
 
     # allocate memory for relative vorticity and tracers, their time 
     # tendencies (at 3 time leves), and their forcings

@@ -85,6 +85,7 @@ function forcing_init(param, wn, type = "point_jet")
     gvort_jet = zeros(1, ny)
     kx, ky = wn.kx, wn.ky
     nkx, nky = length(kx), length(ky)
+    beta = param.beta
     if type == "point_jet"
         
         # point jet:    
@@ -95,16 +96,22 @@ function forcing_init(param, wn, type = "point_jet")
         gvort_jet = gfft2(filter_mask.*wfrcd_trcr, 1, ny) 
         #1= plot(y[1, :], gvort_jet[1, :], "b-", label="point jet") =1# =#
     elseif type == "gaussian_jet"
-        # gaussian jet: 
-        gvort_jet[1, :] = @. -(y - widthy/2)*exp(-(y - widthy/2)^2/jet_width^2/2)  
+        # gaussian jet:
+        # todo bug 
+        # gvort_jet[1, :] = @. -(y - widthy/2)*exp(-(y - widthy/2)^2/jet_width^2/2) 
+        
+        gvort_jet[1, :] = @. -(y)/jet_width^2*exp(-(y)^2/jet_width^2/2) 
         gvort_jet[1, [1, ny]] .= 0  
-        coeff = beta*jet_width  
-        gvort_jet *= coeff  
+        # spectral filtering 
+        gvort_jet = filter(wn, gvort_jet)
+
+        # coeff = beta*jet_width  
+        # gvort_jet *= coeff  
         # stability = @. beta - coeff*exp(-(y - widthy/2)^2/jet_width^2/2)*(1 - (y - widthy/2)^2/jet_width^2/2)  
         # spectral filtering
-        filter_mask = 1 .- abs.(ky/maximum(ky)) 
-        wvort_jet = wfft2(gvort_jet, 1, nky)  
-        gvort_jet = gfft2(filter_mask.*wvort_jet, 1, ny)  
+        # filter_mask = 1 .- abs.(ky/maximum(ky)) 
+        # wvort_jet = wfft2(gvort_jet, 1, nky)  
+        # gvort_jet = gfft2(filter_mask.*wvort_jet, 1, ny)  
         
     elseif type == "2_gaussian_jets"
         # 2 gaussian jets:
@@ -497,7 +504,7 @@ function take_step(m::Model, step_type)
     # compute tendencies
     get_wtracer_tends(m)
 
-    # todo add stirring what is this ? 
+    # add stirring to break the symmetry and lead to chaos 
     update_wstir(m)
     m.wtracer_tends[1, m.tlev[1], :, :] += m.stirring.wstir
 
