@@ -159,6 +159,9 @@ function Wavenumbers(param::Param)
         kxy2 = repeat(kx.^2, 1, nky) + repeat(ky.^2, nkx, 1)
         idx = kxy2 .> eps()
         kalpha[idx] = kxy2[idx].^(-alpha/2)
+
+        # todo not sure the above is true for alpha = 1 
+        @assert(alpha == 2.0)
         
         # spectral damping (numerical dissipation)
         hyperdiff = nvisc*(kxy2/maximum(kxy2)).^4

@@ -19,7 +19,7 @@ function Barotropic()
 relax, beta, alpha = 0.02, 0.0, 2.0
 widthx, widthy = 8*pi, 4*pi 
 ubar = 0.0 
-t_max, dt_diag, dt_chkpt = 10.0, 0.5, 25.0 
+t_max, dt_diag, dt_chkpt = 1000.0, 0.5, 25.0 
 nkx = 2^6
 n_tracers, i_water = 2, 2
 init = true
@@ -40,7 +40,7 @@ nvisc = param.nvisc
 wavnum = Wavenumbers(param)
 x, y = wavnum.x, wavnum.y
 # initialize forcing
-gvort_jet = forcing_init(param, wavnum, "point_jet") #"2_gaussian_jets")
+gvort_jet = forcing_init(param, wavnum, "2_gaussian_jets")
 # initialize stirring
 stirring = stirring_init(param, wavnum)
 
@@ -136,8 +136,8 @@ else
 end
 
 # plot 
-#= plot_type = "rel. vort." =#
-plot_type = "cond"
+plot_type = "rel. vort." 
+# plot_type = "cond"
 #= plot_type = "q" =#
 #= plot_type = "zonal mean q" =#
 #= plot_type = "none" =#
@@ -176,9 +176,9 @@ while model.t[1] < t_max
     take_step(model, "AB3")
     # condense water
     model.wtracers[i_water, :, :], cond = condense(wavnum, model.wtracers[i_water, :, :], qsat)
-    @info norm(model.wtracers)
-    @assert(norm(model.wtracers) ≈ 17244.85817005311)
-    error("successful")
+    # @info norm(model.wtracers)
+    # @assert(norm(model.wtracers) ≈ 17244.85817005311)
+    # error("successful")
     
     if (model.t[1] - t_last_diag) >= dt_diag - sqrt(eps())
         if any(isnan.(model.wtracers))

@@ -222,18 +222,21 @@ function get_wtracer_tends(m::Model)
 #
 #      of the tracer c in Fourier space. 
   
-    # streamfunction (relvor is i=1)
+    
 
     nx, ny = m.param.nx, m.param.ny
     nkx, nky = m.param.nkx, m.param.nky
     beta, ubar = m.param.beta, m.param.ubar
 
+    # streamfunction (relvor is i=1)
     wpsi = -m.wavnum.kalpha.*m.wtracers[1, :, :]
 
     # loop through all the tracers
     for i=1:size(m.wtracers, 1)
-        # advection
+        # advection v ⋅ ∇ω
         wadv = wjacobian(m.wtracers[i, :, :], wpsi, m.wavnum.kx, m.wavnum.ky, nx, ny)
+        
+        # todo what is the ubar term
         if i == 1
             # relvor gets a beta*dpsi/dx term
             wadv += -complex.(0, repeat(m.wavnum.kx[:], 1, nky)).*(beta*wpsi + ubar*m.wtracers[1, :, :])
@@ -474,6 +477,7 @@ end
 Step model `m` forward in time using the method `step_type`.
 """
 function take_step(m::Model, step_type)
+    # todo why dt_factor = 2/3
     if step_type == "single"
         stepper = step_ab2t
         dt_factor = 2/3
@@ -486,13 +490,14 @@ function take_step(m::Model, step_type)
     end
     nx, ny, dt = m.param.nx, m.param.ny, m.param.dt
     relax = m.param.relax
+
     # update relvor forcing
     m.forcing.gforcings[1, :, :] = relax*(m.forcing.gvort_jet - gfft2(m.wtracers[1, :, :], nx, ny))
     
     # compute tendencies
     get_wtracer_tends(m)
 
-    # add stirring what is this ? 
+    # todo add stirring what is this ? 
     update_wstir(m)
     m.wtracer_tends[1, m.tlev[1], :, :] += m.stirring.wstir
 
