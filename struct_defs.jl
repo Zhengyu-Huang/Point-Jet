@@ -7,9 +7,6 @@ mutable struct Param
     # Physics information
     relax::Float64   # Inverse relaxation time scale of forcing
     beta::Float64    # Mean potential vorticity gradient  
-    alpha::Float64    # ALPHA: FT(advected variable) = -(K^alpha) * FT(streamfunction)
-                      # alpha = 2 for barotropic vorticity equation
-                      # alpha = 1 for surface quasi-geostrophy
     n_tracers::Int64
     jet_width::Float64
     ubar::Float64    # Background flow s.t. u0=0 at channel center 
@@ -53,7 +50,7 @@ end
 
 
 
-function Param(;relax = 0.02, beta = 0.0, alpha = 2.0, n_tracers = 2, 
+function Param(;relax = 0.02, beta = 0.0,  n_tracers = 2, 
     ubar = 0.0, nvisc = -1.0,
     #
     deltaT = 0.0, alpha_qsat = 0.07*deltaT, alpha_evap = 0.025*deltaT,
@@ -97,7 +94,7 @@ function Param(;relax = 0.02, beta = 0.0, alpha = 2.0, n_tracers = 2,
     ny = nx
     
     
-    return Param(relax, beta, alpha, n_tracers, jet_width, ubar, nvisc,
+    return Param(relax, beta, n_tracers, jet_width, ubar, nvisc,
     deltaT, alpha_qsat, alpha_evap, 
     widthx, widthy, nkx, nky, nx, ny,
     t_max, dt_diag, dt_chkpt, dt, 
@@ -133,7 +130,7 @@ function Wavenumbers(param::Param)
     #WAVNUM_INIT   Initialize wavenumber fields.
         nx, ny, nkx, nky = param.nx, param.ny, param.nkx, param.nky
         widthx, widthy = param.widthx, param.widthy
-        alpha, nvisc = param.alpha, param.nvisc
+        nvisc = param.nvisc
 
         x = zeros(nx, 1)
         y = zeros(1, ny)
@@ -158,10 +155,8 @@ function Wavenumbers(param::Param)
         # kx^2 + ky^2
         kxy2 = repeat(kx.^2, 1, nky) + repeat(ky.^2, nkx, 1)
         idx = kxy2 .> eps()
-        kalpha[idx] = kxy2[idx].^(-alpha/2)
+        kalpha[idx] = kxy2[idx].^(-1)
 
-        # todo not sure the above is true for alpha = 1 
-        @assert(alpha == 2.0)
         
         # spectral damping (numerical dissipation)
         hyperdiff = nvisc*(kxy2/maximum(kxy2)).^4

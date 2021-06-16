@@ -76,7 +76,7 @@ function filter(wn, gfield)
     return gfield
 end
 
-function forcing_init(param, wn, type = "point_jet")
+function forcing_init(param, wn, type = "point_jet", θ = nothing)
     #FORCING_INIT   Initialize forcing.
     x, y = wn.x, wn.y
     nx, ny = length(wn.x), length(wn.y)
@@ -119,6 +119,13 @@ function forcing_init(param, wn, type = "point_jet")
         (y - widthy/4)/jet_width^2*exp(-(y - widthy/4)^2/jet_width^2/2)
         # spectral filtering 
         gvort_jet = filter(wn, gvort_jet)
+
+    elseif type == "customer"
+        # 2 gaussian jets:
+        gvort_jet[1, :] = @. -(y - θ[1])/jet_width^2*exp(-(y - θ[1])^2/jet_width^2/2) -
+        (y - θ[2])/jet_width^2*exp(-(y - θ[2])^2/jet_width^2/2)
+        # spectral filtering 
+        gvort_jet = filter(wn, gvort_jet)
         
     else
         @error("Forcing type : ", type, " is not recognized.")
@@ -138,7 +145,7 @@ function forcing_init(param, wn, type = "point_jet")
     return gvort_jet
 end
 
-function snapshot(fid, m::Model, cond)
+function snapshot(fid, m::Model)
 #SNAPSHOT  Write model state to file.
 #    SNAPSHOT(fid, t, wrelvor) writes a time stamp t and the (complex)
 #    tracer field wrelvor in spectral representation to the file with
@@ -146,7 +153,6 @@ function snapshot(fid, m::Model, cond)
   
     write(fid, m.t[1])
     write(fid, m.wtracers)
-    write(fid, cond)
 end
 
 function load_pars(fid)
@@ -158,7 +164,6 @@ function load_pars(fid)
     ubar = read(fid, Float64) 
     dt_diag = read(fid, Float64) 
     dt_chkpt = read(fid, Float64) 
-    alpha = read(fid, Float64) 
     dt = read(fid, Float64) 
     nvisc = read(fid, Float64) 
     nkx = read(fid, Int64) 
@@ -166,10 +171,10 @@ function load_pars(fid)
     nx = read(fid, Int64) 
     ny = read(fid, Int64)
     n_tracers = read(fid, Int64)
-    return relax, beta, widthx, widthy, ubar, dt_diag, dt_chkpt, alpha, dt, nvisc, nkx, nky, nx, ny, n_tracers
+    return relax, beta, widthx, widthy, ubar, dt_diag, dt_chkpt, dt, nvisc, nkx, nky, nx, ny, n_tracers
 end
 
-function read_snapshot(fid)
+function read_snapshot(fid, nkx, nky)
 #READ_SNAPSHOT  Read snapshots of model state.
 #    [t, wrelvor]=READ_SNAPSHOT(fid, nkx, nky) reads the next time stamp t
 #    and the (complex) tracer field wrelvor of size [nkx, nky] from the
@@ -177,49 +182,15 @@ function read_snapshot(fid)
   
     t = read(fid, Float64)
 
-    wtracers = complex(zeros(n_tracers, nkx, nky))
+    wtracers = complex(zeros(1, nkx, nky))
     wtracers = read!(fid, wtracers)
 
-    cond = zeros(nx, ny)
-    cond = read!(fid, cond)
-
-    return t, wtracers, cond
+    return t, wtracers
 end  
   
-function checkpoint(chkptf, t, t_last_diag, t_last_chkpt, wrelvor, wrelvor_tend, tlev)
-#CHECKPOINT   Writes list of variables to file.
-#    CHECKPOINT(chkptf, t, t_last_diag, wrelvor, wrelvor_tend, tlev) writes
-#    the variables t, t_last_diag, etc. to the HDF5 file chkptf.h5.
 
-    chkptf = string(chkptf, ".h5")
-    println(string("Writing checkpoint file:    ", chkptf))
-    
-    h5open(chkptf, "w") do file
-        write(file, "t", t)
-        write(file, "t_last_diag", t_last_diag)
-        write(file, "t_last_chkpt", t_last_chkpt)
-        write(file, "wrelvor", wrelvor)
-        write(file, "wrelvor_tend", wrelvor_tend)
-        write(file, "tlev", tlev)
-    end
-end
 
-function read_checkpoint(chkptf)
-#READ_CHECKPOINT   Reads list of variables from file.
-#    READ_CHECKPOINT(chkptf) reads the variables t, t_last_diag, etc. from the 
-#    HDF5  file chkptf.h5.
 
-    chkptf = string(chkptf, ".h5")
-    println(string("Reading checkpoint file:    ", chkptf))
-    
-    t = h5read(chkptf, "t")
-    t_last_diag = h5read(chkptf, "t_last_diag")
-    t_last_chkpt = h5read(chkptf, "t_last_chkpt")
-    wrelvor = h5read(chkptf, "wrelvor")
-    wrelvor_tend = h5read(chkptf, "wrelvor_tend")
-    tlev = h5read(chkptf, "tlev")
-    return t, t_last_diag, t_last_chkpt, wrelvor, wrelvor_tend, tlev
-end
 
 function get_wtracer_tends(m::Model)
 #DC_DT   Time-tendency of tracer in barotropic or SQG flow.
@@ -239,24 +210,22 @@ function get_wtracer_tends(m::Model)
     wpsi = -m.wavnum.kalpha.*m.wtracers[1, :, :]
 
     # loop through all the tracers
-    for i=1:size(m.wtracers, 1)
+    
         # advection v ⋅ ∇ω
-        wadv = wjacobian(m.wtracers[i, :, :], wpsi, m.wavnum.kx, m.wavnum.ky, nx, ny)
+        wadv = wjacobian(m.wtracers[1, :, :], wpsi, m.wavnum.kx, m.wavnum.ky, nx, ny)
         
         # todo what is the ubar term
-        if i == 1
-            # relvor gets a beta*dpsi/dx term
-            wadv += -complex.(0, repeat(m.wavnum.kx[:], 1, nky)).*(beta*wpsi + ubar*m.wtracers[1, :, :])
-        else
-            wadv += -complex.(0, repeat(m.wavnum.kx[:], 1, nky)).*ubar.*m.wtracers[i, :, :]
-        end
+        
+        # relvor gets a beta*dpsi/dx term
+        wadv += -complex.(0, repeat(m.wavnum.kx[:], 1, nky)).*(beta*wpsi + ubar*m.wtracers[1, :, :])
+        
 
         # forcing
-        wforcing = wfft2(m.forcing.gforcings[i, :, :], nkx, nky)
+        wforcing = wfft2(m.forcing.gforcings[1, :, :], nkx, nky)
 
         # time tendency of tracer field
-        m.wtracer_tends[i, m.tlev[1], :, :] = wadv + wforcing
-    end
+        m.wtracer_tends[1, m.tlev[1], :, :] = wadv + wforcing
+
 end
 
 function wjacobian(wA, wB, kx, ky, nx, ny)
@@ -409,38 +378,87 @@ function  step_ab3t(y, F, tlev, damping, dt)
     return @. (y + dt/12*(23*F[tlev[1], :, :] - 16*F[tlev[2], :, :] + 5*F[tlev[3], :, :]) - 0.5*dt*damping*y)./(1 + 0.5*dt*damping)
 end
 
-#= function pv(wrelvor, y) =#
-#= #PV    Potential vorticity on grid =#
-  
-#=     grelvor = gfft2(wrelvor, nx, ny) =#
-#=     gpv = grelvor + beta*repeat(y', nx, 1) =#
 
-#=     return gpv =#
-#= end =#
-  
-"""
-    fx, fy = sgradient(f, kx, ky)
 
-Evaluates the derivatives of the grid field `f` with respect to x and y using 
-the spectral transform method. The vectors `kx` and `ky` are vectors of
-wavenumbers.
+
+
 """
-function sgradient(f, kx, ky)
-    nx, ny = size(f)
-    nkx = size(kx[:], 1)
-    nky = size(ky[:], 1)
+    take_step(m, step_type)
+
+Step model `m` forward in time using the method `step_type`.
+"""
+function take_step(m::Model, step_type)
+    # todo why dt_factor = 2/3
+    if step_type == "single"
+        stepper = step_ab2t
+        dt_factor = 2/3
+    elseif step_type == "AB2"
+        stepper = step_ab2t
+        dt_factor = 1
+    elseif step_type == "AB3"
+        stepper = step_ab3t
+        dt_factor = 1
+    end
+    nx, ny, dt = m.param.nx, m.param.ny, m.param.dt
+    relax = m.param.relax
+
+    # update relvor forcing
+    m.forcing.gforcings[1, :, :] = relax*(m.forcing.gvort_jet - gfft2(m.wtracers[1, :, :], nx, ny))
     
-    # assemble wavenumber matrices of same size as wavenumber fields and multiply by i
-    ikx = im*repeat(kx[:], 1, nky)
-    iky = im*repeat(ky[:]', nkx, 1)
+    # compute tendencies
+    get_wtracer_tends(m)
+
+    # add stirring to break the symmetry and lead to chaos 
+    update_wstir(m)
+    m.wtracer_tends[1, m.tlev[1], :, :] += m.stirring.wstir
+
+    # take step
     
-    # evaluate derivatives
-    wf = wfft2(f, nkx, nky)
-    fx = gfft2(ikx.*wf, nx, ny)
-    fy = gfft2(iky.*wf, nx, ny)
-    
-    return fx, fy
+            # use hyperdiffusion for relvor
+            m.wtracers[1, :, :] = stepper(m.wtracers[1, :, :], 
+                                          m.wtracer_tends[1, :, :, :], m.tlev, 
+                                          m.wavnum.hyperdiff, 
+                                          dt_factor*dt)
+
+
+
+    # update tlev and t
+    m.tlev[:] = m.tlev[[3 1 2]]
+    m.t[:] .+= dt
 end
+
+
+
+
+"""
+    ph, ax = init_plot(x, y, field, cmap)
+
+Begin a plot of 2D `field` for animations. Uses colormap `cmap` and returns plot handle `ph` and 
+axis `ax`.
+"""
+function init_plot(x, y, field, cmap)
+    fig, ax = subplots(1)
+    ph = ax.pcolormesh(x[:, 1], y[1, :], field', cmap=cmap)
+    colorbar(ph, ax=ax)
+    ax.set_title("t=0.0")
+    return ph, ax
+end
+
+"""
+    zm = zonal_mean(field)
+
+Returns 1D array `zm` representing zonal mean (mean in x direction) of 2D `field`.
+"""
+function zonal_mean(field)
+    nx = size(field, 1)
+    return sum(field, dims=1)/nx
+end
+
+
+
+
+#############################################################################
+
 
 """
     u, v = velocities(m)
@@ -475,210 +493,4 @@ function velocities(wrelvor, wavnum)
     v = gfft2(ikx.*wpsi, nx, ny)
 
     return u, v
-end
-
-
-"""
-    take_step(m, step_type)
-
-Step model `m` forward in time using the method `step_type`.
-"""
-function take_step(m::Model, step_type)
-    # todo why dt_factor = 2/3
-    if step_type == "single"
-        stepper = step_ab2t
-        dt_factor = 2/3
-    elseif step_type == "AB2"
-        stepper = step_ab2t
-        dt_factor = 1
-    elseif step_type == "AB3"
-        stepper = step_ab3t
-        dt_factor = 1
-    end
-    nx, ny, dt = m.param.nx, m.param.ny, m.param.dt
-    relax = m.param.relax
-
-    # update relvor forcing
-    m.forcing.gforcings[1, :, :] = relax*(m.forcing.gvort_jet - gfft2(m.wtracers[1, :, :], nx, ny))
-    
-    # compute tendencies
-    get_wtracer_tends(m)
-
-    # add stirring to break the symmetry and lead to chaos 
-    update_wstir(m)
-    m.wtracer_tends[1, m.tlev[1], :, :] += m.stirring.wstir
-
-    # take step
-    for i=1:size(m.wtracers, 1)
-        if i == 1
-            # use hyperdiffusion for relvor
-            m.wtracers[i, :, :] = stepper(m.wtracers[i, :, :], 
-                                          m.wtracer_tends[i, :, :, :], m.tlev, 
-                                          m.wavnum.hyperdiff, 
-                                          dt_factor*dt)
-        else
-            # otherwise regular diffusion
-            m.wtracers[i, :, :] = stepper(m.wtracers[i, :, :], 
-                                          m.wtracer_tends[i, :, :, :], m.tlev, 
-                                          m.wavnum.diff, 
-                                          #= m.wavnum.hyperdiff, =# 
-                                          dt_factor*dt)
-        end
-    end
-
-    # update tlev and t
-    m.tlev[:] = m.tlev[[3 1 2]]
-    m.t[:] .+= dt
-end
-
-"""
-    evap = evap_fn(y, dt, alpha_evap)
-
-Returns evaporation rate `evap` at latitude `y`.
-"""
-function evap_fn(y::Float64, width::Float64, dt::Float64, alpha_evap::Float64)
-    # as in O'Gorman et al. 2011
-    A = 0.3
-    B = 0.1
-    e_background = 0.1
-    L = width/2
-    evap = dt*(e_background + A*exp(-(y/2/L/B)^2))
-    return evap*(1 + alpha_evap)
-end
-"""
-    evap = evap_fn(wn, y)
-
-Returns evaporation rate `evap` for all latitudes `y` and applies smoothing.
-"""
-function evap_fn(param, wn, y::Array{Float64})
-    widthy, dt, alpha_evap = param.widthy, param.dt, param.alpha_evap
-    # compute for each y
-    evap = similar(y)
-    for i = 1:length(evap)
-        evap[i] = evap_fn(y[i], widthy, dt, alpha_evap) 
-    end
-    # filter
-    evap = filter(wn, evap)
-    return evap
-end
-
-"""
-    qsat = saturation_fn(y, alpha_qsat)
-
-Returns saturation specific humidity `qsat` at latitude `y`.
-"""
-function saturation_fn(y::Float64, widthy::Float64, alpha_qsat::Float64)
-    qmax = 0.8
-
-    # as in O'Gorman et al. 2011
-    qmin = 0.01
-
-    L = widthy/2
-    y0 = L/2
-    
-    γ = 0.15
-    β = (qmax - qmin)/(tanh(y0/γ/L) - tanh((y0 - L)/γ/L))
-    α = qmax - β*tanh(y0/γ/L)
-    qsat = α + β*tanh((y0 - abs(y))/γ/L)
-    qsat *= (1 + alpha_qsat)
-
-    #= # triangle =#
-    #= qmin = 0.15 =#
-    #= L = widthy/2 =#
-    #= slope = (qmax - qmin)/L =#
-    #= qsat = qmax - slope*(1 + alpha_qsat)*abs(y) =#
-
-    #= # trapezoid =#
-    #= qmin = 0.01 =#
-    #= L = widthy/(2*π)      # length of sloping segment =#
-    #= L /= (1 + alpha_qsat) # adjust slope =#
-    #= L0 = (widthy/2 - L)/2 # beginning of slope =#
-    #= L1 = (widthy/2 + L)/2 # end of slope =#
-    #= if abs(y) < L0 =#
-    #=     return qmax =#
-    #= elseif abs(y) > L1 =#
-    #=     return qmin =#
-    #= else =#
-    #=     slope = (qmax - qmin)/L =#
-    #=     return qmax - slope*(abs(y) - L0) =#
-    #= end =#
-    
-    return qsat
-end
-"""
-    qsat = saturation_fn(wn, y)
-
-Returns saturation specific humidity `qsat` for all latitudes `y` and applies smoothing.
-"""
-function saturation_fn(param, wn, y::Array{Float64})
-    # compute for each y
-    widthy, alpha_qsat = param.widthy, param.alpha_qsat
-    qsat = similar(y)
-    for i = 1:length(qsat)
-        qsat[i] = saturation_fn(y[i], widthy, alpha_qsat) 
-    end
-    # filter
-    qsat = filter(wn, qsat)
-    return qsat
-end
-
-"""
-    qsat_y = saturation_fn_y(wn, y)
-
-Returns meridional derivative of the saturation specific humidity `qsat_y` at latitude `y`.
-"""
-function saturation_fn_y(wn, y)
-    # as in O'Gorman et al. 2011
-    qmax = 0.8
-    qmin = 0.01
-    L = widthy/2
-    y0 = L/2
-    γ = 0.15
-    β = (qmax - qmin)/(tanh(y0/γ/L) - tanh((y0 - L)/γ/L))
-    qsat_y = @. -β*sech((y0 - abs(y))/γ/L)^2/(pi*γ)*sign(y)
-    qsat_y *= (1 + alpha_qsat)
-
-    # filter
-    qsat_y = filter(wn, qsat_y)
-    return qsat_y
-end
-
-"""
-    wwater, cond = condense(wwater)
-
-Applies instantaneous condensation. Given water vapor state in wavenumber space, `wwater`, 
-removes `cond` from water vapor state in physical space where q - qsat > 0. Returns new
-water vapor state.
-"""
-function condense(wn, wwater, qsat)
-    nx, ny, nkx, nky = length(wn.x), length(wn.y), length(wn.kx), length(wn.ky)
-    gwater = gfft2(wwater, nx, ny)
-    cond = gwater .- qsat
-    cond[cond .< 0.0] .= 0.0
-    gwater .-= cond
-    wwater = wfft2(gwater, nkx, nky)
-    return wwater, cond 
-end
-
-"""
-    ph, ax = init_plot(x, y, field, cmap)
-
-Begin a plot of 2D `field` for animations. Uses colormap `cmap` and returns plot handle `ph` and 
-axis `ax`.
-"""
-function init_plot(x, y, field, cmap)
-    fig, ax = subplots(1)
-    ph = ax.pcolormesh(x[:, 1], y[1, :], field', cmap=cmap)
-    colorbar(ph, ax=ax)
-    ax.set_title("t=0.0")
-    return ph, ax
-end
-
-"""
-    zm = zonal_mean(field)
-
-Returns 1D array `zm` representing zonal mean (mean in x direction) of 2D `field`.
-"""
-function zonal_mean(field)
-    return sum(field, dims=1)/nx
 end
