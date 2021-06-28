@@ -1,0 +1,1 @@
+function gpv = pv(wrelvor, pars, y)%PV    Potential vorticity on grid    grelvor  = gfft2(wrelvor, pars.nx, pars.ny);  gpv      = grelvor + pars.beta * repmat(y, pars.nx, 1);

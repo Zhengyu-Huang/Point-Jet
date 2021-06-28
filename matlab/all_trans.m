@@ -1,0 +1,1 @@
+close allparams;rs         = .01 * 2.^[-3:4];nr         = length(rs);for j=1:nr  fnam     = ['beta=1_relax=', num2str(rs(j))];  trans_stats;end

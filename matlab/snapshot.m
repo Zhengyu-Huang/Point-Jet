@@ -1,0 +1,1 @@
+function snapshot(fid, t, wq)%SNAPSHOT  Write model state to file.%    SNAPSHOT(fid, t, wq) writes a time stamp t and the (complex)%    tracer field wq in spectral representation to the file with%    identifier fid.    fwrite(fid, t,  'single');  fwrite(fid, real(wq), 'single');  fwrite(fid, imag(wq), 'single');
