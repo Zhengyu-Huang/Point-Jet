@@ -9,10 +9,10 @@ pars.nky       = pars.nky*2^N;
 pars.nx        = pars.nx*2^N;
 pars.ny        = pars.ny*2^N;
 
-pars.nkx       = 16;
-pars.nky       = 16;
-pars.nx        = 16*2;
-pars.ny        = 16*2;
+% pars.nkx       = 16;
+% pars.nky       = 16;
+% pars.nx        = 16*2;
+% pars.ny        = 16*2;
 % extract dimension parameters
 nkx       = pars.nkx;
 nky       = pars.nky;
@@ -49,8 +49,8 @@ for i = 1:nx
         closure(i,j) = u(i,j)*dw_dx(i,j)+v(i,j)*dw_dy(i,j);
     end
 end
-wq = wfft2(w, nkx, nky);
 
+wq = wfft2(w, nkx, nky);
 
 
 % test 
