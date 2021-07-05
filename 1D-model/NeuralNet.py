@@ -1,4 +1,8 @@
-# u_d(x) = \int K(x, y, θ_c) u_n(y) dy
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
 class DirectNet_20(nn.Module):
 
     def __init__(self, N_in, N_out):

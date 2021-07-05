@@ -12,9 +12,10 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import animation
-import torch
+import matplotlib.animation as animation
 from Utility import gradient_first, gradient_second
+from NeuralNet import *
+
 
 # the model is a function: w,t ->  M(w)
 def explicit_solve(model, tau, omega_jet, dt = 1.0, Nt = 1000, save_every = 1, L = 4*np.pi):
@@ -24,12 +25,13 @@ def explicit_solve(model, tau, omega_jet, dt = 1.0, Nt = 1000, save_every = 1, L
 
     t = 0.0
     omega = np.zeros(Ny)
-
+    omega = np.copy(omega_jet)
 
     omega_data = np.zeros((Nt//save_every+1, Ny))
     t_data = np.zeros(Nt//save_every+1)
     omega_data[0, :], t_data[0] = omega, t
 
+    
     
 
     for i in range(1, Nt+1): 
@@ -75,26 +77,26 @@ def animate(yy, t_data, omega_data):
 
 
 
-def model(omega, tau, dy):
+def nummodel(omega, tau, dy):
     # return np.zeros(len(omega))
     # a0, a1, b0, b1 = 0.2, 0.3, 0.4, 0.5
 
-    a0, a1, b0, b1 = -0.2, -0.3, -0.4, -0.5
+    # a0, a1, b0, b1 = -0.2, -0.3, -0.4, -0.5
 
-    d_omega = gradient_first(omega, dy)
+    d_omega = gradient_second(omega, dy)
 
-    return  ( a1*np.tanh(a0*d_omega + b0) + b1 ) / tau
+    return  -1e-2*d_omega /tau # ( a1*np.tanh(a0*d_omega + b0) + b1 ) / tau
     # return  ( a1*torch.relu( (a0*omega + b0)) + b1 ) / tau
 
 
-# def model(torchmodel, omega, tau):
-#     # return np.zeros(len(omega))
-#     # a0, a1, b0, b1 = 0.2, 0.3, 0.4, 0.5
+def nnmodel(torchmodel, omega, tau, dy):
+    # return np.zeros(len(omega))
+    # a0, a1, b0, b1 = 0.2, 0.3, 0.4, 0.5
+    
+    return torchmodel(torch.reshape(torch.tensor(omega, dtype=torch.float32), (len(omega),1))).detach().numpy().flatten() / tau
 
-#     a0, a1, b0, b1 = -0.2, -0.3, -0.4, -0.5
-
-#     # return  ( a1*np.tanh(a0*omega + b0) + b1 ) / tau
-#     return  ( a1*torch.relu( torch.tensor(a0*omega + b0)) + b1 ) / tau
+    # return  ( a1*np.tanh(a0*omega + b0) + b1 ) / tau
+    # return  ( a1*torch.relu( torch.tensor(a0*omega + b0)) + b1 ) / tau
 
 
 tau = 10.0
@@ -104,6 +106,9 @@ omega_jet[0:N//2] = 1.0
 omega_jet[N-N//2:N] = -1.0
 
 
-yy, t_data, omega_data = explicit_solve(model, tau, omega_jet, dt = 1.0, Nt = 100, save_every = 1, L = 4*np.pi)
+# model = lambda omega, tau, dy : nnmodel(DirectNet_20(1, 1), omega, tau, dy)
+
+model  = nummodel
+yy, t_data, omega_data = explicit_solve(model, tau, omega_jet, dt = 0.5, Nt = 500000, save_every = 100, L = 4*np.pi)
 # plot_mean(yy, omega_data)
 animate(yy, t_data, omega_data)
