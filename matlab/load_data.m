@@ -58,6 +58,8 @@ function [] = load_data(beta, Gamma, relax, output_fdir)
     data_q = mean(w) + pars.beta*y;
     data_dq_dy = mean(dw_dy) + pars.beta;
     data_dq2_dy2 = mean(dw2_dy2);
+    data_w = mean(w);
+    data_dw_dy = mean(dw_dy);
     data_closure = mean(closure);
     data_closure_cons = mean(closure_cons);
     data_psi = mean(psi);
@@ -80,6 +82,8 @@ function [] = load_data(beta, Gamma, relax, output_fdir)
         data_q = cat(3,data_q,mean(w) + pars.beta*y);
         data_dq_dy = cat(3,data_dq_dy,mean(dw_dy) + pars.beta);
         data_dq2_dy2 = cat(3,data_dq2_dy2,mean(dw2_dy2));
+        data_w = cat(3,data_w,mean(w));
+        data_dw_dy = cat(3,data_dw_dy,mean(dw_dy));
         data_closure = cat(3,data_closure,mean(closure));
         data_closure_cons = cat(3,data_closure_cons,mean(closure_cons));
         data_psi = cat(3,data_psi,mean(psi));
@@ -93,6 +97,8 @@ function [] = load_data(beta, Gamma, relax, output_fdir)
     save([fdir 'data_q.mat'],'data_q');
     save([fdir 'data_dq_dy.mat'],'data_dq_dy');
     save([fdir 'data_dq2_dy2.mat'],'data_dq2_dy2');
+    save([fdir 'data_w.mat'],'data_w');
+    save([fdir 'data_dw_dy.mat'],'data_dw_dy');
     save([fdir 'data_closure.mat'],'data_closure');
     save([fdir 'data_closure_cons.mat'],'data_closure_cons');
     save([fdir 'data_psi.mat'],'data_psi');
