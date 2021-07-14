@@ -48,13 +48,20 @@ function [] = load_data(beta, Gamma, relax, output_fdir)
     gpv = pv(wq, pars, y);
     w = gpv - pars.beta*y;
     [dw_dx, dw_dy] = sgradient(w, wavnum.kx, wavnum.ky);
+    %[dw2_dxdy, dw2_dy2] = sgradient(dw_dy, wavnum.kx, wavnum.ky);
+    [dw2_dx2, dw2_dy2] = sgradient2(w, wavnum.kx, wavnum.ky);
     closure = u.*dw_dx+v.*dw_dy;
+    closure_cons = v.*w;
     psi = gfft2(- wavnum.kalpha .* wq, nx, ny);
     data_u = mean(u);
     data_v = mean(v);
+    data_q = mean(w) + pars.beta*y;
+    data_dq_dy = mean(dw_dy) + pars.beta;
+    data_dq2_dy2 = mean(dw2_dy2);
     data_w = mean(w);
     data_dw_dy = mean(dw_dy);
     data_closure = mean(closure);
+    data_closure_cons = mean(closure_cons);
     data_psi = mean(psi);
     while ~feof(fid)
       nsave   = nsave + 1;
@@ -64,14 +71,21 @@ function [] = load_data(beta, Gamma, relax, output_fdir)
         gpv = pv(wq, pars, y);
         w = gpv - pars.beta*y;
         [dw_dx, dw_dy] = sgradient(w, wavnum.kx, wavnum.ky);
+        %[dw2_dxdy, dw2_dy2] = sgradient(dw_dy, wavnum.kx, wavnum.ky);
+        [dw2_dx2, dw2_dy2] = sgradient2(w, wavnum.kx, wavnum.ky);
         closure = u.*dw_dx+v.*dw_dy;
+        closure_cons = v.*w;
         psi = gfft2(- wavnum.kalpha .* wq, nx, ny);
 
         data_u = cat(3,data_u,mean(u));
         data_v = cat(3,data_v,mean(v));
+        data_q = cat(3,data_q,mean(w) + pars.beta*y);
+        data_dq_dy = cat(3,data_dq_dy,mean(dw_dy) + pars.beta);
+        data_dq2_dy2 = cat(3,data_dq2_dy2,mean(dw2_dy2));
         data_w = cat(3,data_w,mean(w));
         data_dw_dy = cat(3,data_dw_dy,mean(dw_dy));
         data_closure = cat(3,data_closure,mean(closure));
+        data_closure_cons = cat(3,data_closure_cons,mean(closure_cons));
         data_psi = cat(3,data_psi,mean(psi));
       end
       [t, wq] = read_snapshot(fid, nkx, nky);
@@ -80,8 +94,12 @@ function [] = load_data(beta, Gamma, relax, output_fdir)
     fclose(fid);
     save([fdir 'data_u.mat'],'data_u');
     save([fdir 'data_v.mat'],'data_v');
+    save([fdir 'data_q.mat'],'data_q');
+    save([fdir 'data_dq_dy.mat'],'data_dq_dy');
+    save([fdir 'data_dq2_dy2.mat'],'data_dq2_dy2');
     save([fdir 'data_w.mat'],'data_w');
     save([fdir 'data_dw_dy.mat'],'data_dw_dy');
     save([fdir 'data_closure.mat'],'data_closure');
+    save([fdir 'data_closure_cons.mat'],'data_closure_cons');
     save([fdir 'data_psi.mat'],'data_psi');
 end
