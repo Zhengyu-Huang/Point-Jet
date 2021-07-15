@@ -94,7 +94,8 @@ def nummodel(omega, tau, dy):
 
     mu_t = mu_f 
 
-    mu_f[mu_f >=0] = 0.0
+    mu_t[mu_t >=0] = 0.0
+    mu_t[mu_t <=-0.1] = 0.0
 
 
     d_omega = gradient_first_c2f(omega, dy)
@@ -138,15 +139,28 @@ w = scipy.io.loadmat(data_dir+"data_w.mat")["data_w"]
 
 _, _, Nf = closure.shape
 mu_c = np.mean(closure[0, :, Nf//2:], axis=1)/np.mean(dq_dy[0, :, Nf//2:], axis=1)
+
+
+mu_c[mu_c >=0] = 0.0
+mu_c[mu_c <=-0.1] = 0.0
+
+
 mu_f = interpolate_c2f(mu_c)
 
 model  = nummodel
 # 50000
-yy, t_data, omega_data = explicit_solve(model, tau, omega_jet, dt = 0.001, Nt = 5000000, save_every = 100, L = 4*np.pi)
+yy, t_data, omega_data = explicit_solve(model, tau, omega_jet, dt = 0.001, Nt = 500000, save_every = 100, L = 4*np.pi)
 
 plt.plot(np.mean(omega_data, axis=0), yy, label="fit")
-plt.plot(np.mean(w[0,:,:].T, axis=0), yy, label="truth")
+plt.plot(np.mean(w[0,:,:].T, axis=0)+yy, yy, label="truth")
+plt.plot(omega_jet, yy, label="jet")
 plt.plot(mu_c, yy, label="mu")
 plt.legend()
 plt.show()
 # animate(yy, t_data, omega_data)
+
+plt.plot(np.mean(dq_dy[0, :, Nf//2:], axis=1), yy, "-o", fillstyle="none", label="dq_dy")
+plt.plot(mu_c, yy, "-o", fillstyle="none", label="mu_c")
+plt.plot(np.mean(closure[0, :, Nf//2:], axis=1), yy, "-o", fillstyle="none", label="closure")
+plt.legend()
+plt.show()

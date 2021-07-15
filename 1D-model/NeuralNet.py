@@ -10,14 +10,11 @@ class DirectNet_20(nn.Module):
         # an affine operation: y = Wx + b
         
         self.fc1 = nn.Linear(N_in, 20)
-        self.fc5 = nn.Linear(20, N_out)
+        self.fc2 = nn.Linear(20, N_out)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        # x = F.relu(self.fc2(x))
-        # x = F.relu(self.fc3(x))
-        # x = F.relu(self.fc4(x))
-        x = self.fc5(x)
+        x = self.fc2(x)
         return x
 
 
