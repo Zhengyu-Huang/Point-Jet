@@ -38,7 +38,7 @@ y_train = torch.from_numpy(mu_c_all[:,np.newaxis].astype(np.float32))
 ind = 2
 outd = 1 
 layers = 2
-width = 10
+width = 50
 activation='relu'
 model  = FNN(ind, outd, layers, width, activation)
 loss_fn = torch.nn.MSELoss(reduction='sum')
