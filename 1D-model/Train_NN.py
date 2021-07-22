@@ -23,32 +23,34 @@ q_mean = np.mean(q[0, :, Nf//2:], axis=1)
 dq_dy_mean = np.mean(dq_dy[0, :, Nf//2:], axis=1)
 closure_mean = np.mean(closure[0, :, Nf//2:], axis=1)
 mu_c = closure_mean/dq_dy_mean
-# x_train  = torch.from_numpy(np.stack((q_mean, dq_dy_mean)).T.astype(np.float32))
-# y_train = torch.from_numpy(mu_c[:,np.newaxis].astype(np.float32))
+
+mu_c = scipy.ndimage.gaussian_filter1d(mu_c, 5)
+
+x_train  = torch.from_numpy(np.stack((q_mean, dq_dy_mean)).T.astype(np.float32))
+y_train = torch.from_numpy(mu_c[:,np.newaxis].astype(np.float32))
 
 
-q_all = q[0, :, :].flatten()
-dq_dy_all = dq_dy[0, :, :].flatten()
-closure_all = closure[0, :, :].flatten()
-mu_c_all = closure_all/dq_dy_all
-x_train  = torch.from_numpy(np.stack((q_all, dq_dy_all)).T.astype(np.float32))
-y_train = torch.from_numpy(mu_c_all[:,np.newaxis].astype(np.float32))
+# q_all = q[0, :, :].flatten()
+# dq_dy_all = dq_dy[0, :, :].flatten()
+# closure_all = closure[0, :, :].flatten()
+# mu_c_all = closure_all/dq_dy_all
+# x_train  = torch.from_numpy(np.stack((q_all, dq_dy_all)).T.astype(np.float32))
+# y_train = torch.from_numpy(mu_c_all[:,np.newaxis].astype(np.float32))
 
 
 ind = 2
 outd = 1 
 layers = 2
-width = 50
+width = 10
 activation='relu'
 model  = FNN(ind, outd, layers, width, activation)
 loss_fn = torch.nn.MSELoss(reduction='sum')
 learning_rate = 1e-3
 optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-4)
-loss_scale = 1000
-n_epochs = 1000
+n_epochs = 100000
 for epoch in range(n_epochs):
 	y_pred = -torch.square(model(x_train))
-	loss = loss_fn(y_pred,y_train)*loss_scale
+	loss = loss_fn(y_pred,y_train)*1000.0
 
 	optimizer.zero_grad()
 	loss.backward()
