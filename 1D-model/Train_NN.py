@@ -63,6 +63,7 @@ y_pred_train = -model(torch.from_numpy(np.stack((q_mean, dq_dy_mean)).T.astype(n
 
 
 yy = np.linspace(-2*np.pi, 2*np.pi, Ny)
+plt.figure()
 plt.plot(yy, mu_c,  '--o', fillstyle="none", markevery = 1, markersize = 3, label="mu")
 plt.plot(yy, y_pred_train,  '--o', fillstyle="none", markevery = 1, markersize = 3, label="NN(q, dq_dy)")
 
