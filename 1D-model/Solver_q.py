@@ -103,10 +103,20 @@ def nnmodel(torchmodel, omega, tau, dy):
 
 
     d_omega = gradient_first_c2f(omega, dy)
-    omega_f = interpolate_c2f(omega)
 
+
+    omega_f = interpolate_c2f(omega)
     input  = torch.from_numpy(np.stack((omega_f, d_omega)).T.astype(np.float32))
-    mu_f = -torchmodel(input).detach().numpy().flatten()**2
+    mu_f = -torchmodel(input).detach().numpy().flatten()
+    mu_f[mu_f >= 0.0] = 0.0
+
+    # d_omega_c = gradient_first(omega, dy)
+    # input  = torch.from_numpy(np.stack((omega, d_omega_c)).T.astype(np.float32))
+    # mu_c = -torchmodel(input).detach().numpy().flatten()
+    # mu_c[mu_c >= 0.0] = 0.0
+    # mu_f = interpolate_c2f(mu_c)
+
+    # print(mu_f)
     # plt.figure()
     # plt.plot(mu_f)
     # plt.show()
@@ -135,11 +145,15 @@ w = scipy.io.loadmat(data_dir+"data_w.mat")["data_w"]
 q = scipy.io.loadmat(data_dir+"data_q.mat")["data_q"]
 
 tau = 1/0.16
+_, Ny, Nf = closure.shape
+dy = L/(Ny - 1)
+
 MODEL = "nnmodel"
 
+
 if MODEL == "nummodel":
-    _, Ny, Nf = closure.shape
-    dy = L/(Ny - 1)
+    
+    
     q_mean = np.mean(q[0, :, Nf//2:], axis=1)
     dq_mean_dy = gradient_first(np.mean(q[0, :, Nf//2:], axis=1), dy)
     closure_mean = np.mean(closure[0, :, Nf//2:], axis=1)
@@ -158,8 +172,8 @@ elif MODEL == "nnmodel":
 else:
     print("ERROR")
 
-yy, t_data, omega_data = explicit_solve(model, tau, omega_jet, dt = 0.001, Nt = 500000, save_every = 100, L = 4*np.pi)
-
+yy, t_data, omega_data = explicit_solve(model, tau, omega_jet, dt = 0.001, Nt = 200000, save_every = 100, L = 4*np.pi)
+plt.figure()
 plt.plot(yy, np.mean(omega_data, axis=0) - yy,  label="plug-in")
 # plt.plot(yy, np.mean(omega_data, axis=0),  label="nn")
 plt.plot(yy, np.mean(q[0,:,:].T, axis=0) - yy,  label="truth")
@@ -169,18 +183,16 @@ plt.legend()
 plt.show()
 # animate(yy, t_data, omega_data)
 
-# dy = yy[1] - yy[0]
-# omega = omega_data[-1, :]
-# d_omega = gradient_first_c2f(omega, dy)
-# omega_f = interpolate_c2f(omega)
-# input  = torch.from_numpy(np.stack((omega_f, d_omega)).T.astype(np.float32))
-# mu_f = -mymodel(input).detach().numpy().flatten()**2
-# plt.plot(omega_f)
-# plt.plot(d_omega)
-# plt.plot(mu_f)
-# plt.show()
-
-# plt.plot((omega_jet - q_mean)/tau , label="(q_jet - q) / tau")
-# plt.plot(closure_mean_dy , label="dM_dy")
-# plt.legend()
-# plt.show()
+omega = omega_data[-1, :]
+d_omega = gradient_first_c2f(omega, dy)
+omega_f = interpolate_c2f(omega)
+input  = torch.from_numpy(np.stack((omega_f, d_omega)).T.astype(np.float32))
+mu_f = -mymodel(input).detach().numpy().flatten()
+# mu_f[mu_f >= 0.0] = 0.0
+plt.figure()
+plt.plot(interpolate_c2f(yy), mu_f,  "-o", fillstyle = "none", label="nn")
+# plt.plot(yy, np.mean(omega_data, axis=0) - yy,  label="plug-in")
+# # plt.plot(yy, np.mean(omega_data, axis=0),  label="nn")
+# plt.plot(yy, np.mean(q[0,:,:].T, axis=0) - yy,  label="truth")
+plt.legend()
+plt.show()
