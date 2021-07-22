@@ -24,7 +24,7 @@ dq_dy_mean = np.mean(dq_dy[0, :, Nf//2:], axis=1)
 closure_mean = np.mean(closure[0, :, Nf//2:], axis=1)
 mu_c = closure_mean/dq_dy_mean
 
-mu_c = scipy.ndimage.gaussian_filter1d(mu_c, 5)
+# mu_c = scipy.ndimage.gaussian_filter1d(mu_c, 5)
 
 x_train  = torch.from_numpy(np.stack((q_mean, dq_dy_mean)).T.astype(np.float32))
 y_train = torch.from_numpy(mu_c[:,np.newaxis].astype(np.float32))
