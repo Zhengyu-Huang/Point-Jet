@@ -106,9 +106,9 @@ def nnmodel(torchmodel, omega, tau, dy):
 
 
     omega_f = interpolate_c2f(omega)
-    input  = torch.from_numpy(np.stack(((omega_f), d_omega)).T.astype(np.float32))
-    mu_f = -torchmodel(input).detach().numpy().flatten()**2
-    # mu_f[mu_f >= 0.0] = 0.0
+    input  = torch.from_numpy(np.stack((abs(omega_f), d_omega)).T.astype(np.float32))
+    mu_f = -torchmodel(input).detach().numpy().flatten()
+    mu_f[mu_f >= 0.0] = 0.0
 
     # d_omega_c = gradient_first(omega, dy)
     # input  = torch.from_numpy(np.stack((omega, d_omega_c)).T.astype(np.float32))
@@ -116,7 +116,7 @@ def nnmodel(torchmodel, omega, tau, dy):
     # mu_c[mu_c >= 0.0] = 0.0
     # mu_f = interpolate_c2f(mu_c)
 
-    # mu_f = scipy.ndimage.gaussian_filter1d(mu_f, 5)
+    mu_f = scipy.ndimage.gaussian_filter1d(mu_f, 5)
     
 
     # print(mu_f)
@@ -141,30 +141,37 @@ omega_jet += 1*yy
 
 #model = lambda omega, tau, dy : nnmodel(DirectNet_20(1, 1), omega, tau, dy)
 
-data_dir = "../data/beta_1.0_Gamma_1.0_relax_0.16/"
+tau_inv = "0.08"
+# tau_inv = "0.16"
+tau = 1/float(tau_inv)
+data_dir = "../data/beta_1.0_Gamma_1.0_relax_" + tau_inv + "/"
 dq_dy = scipy.io.loadmat(data_dir+"data_dq_dy.mat")["data_dq_dy"]
 closure = scipy.io.loadmat(data_dir+"data_closure_cons.mat")["data_closure_cons"]
 w = scipy.io.loadmat(data_dir+"data_w.mat")["data_w"]
 q = scipy.io.loadmat(data_dir+"data_q.mat")["data_q"]
 
-tau = 1/0.16
+
 _, Ny, Nf = closure.shape
 dy = L/(Ny - 1)
 
-MODEL = "nnmodel"
+MODEL = "nummodel"
 
 
 if MODEL == "nummodel":
     
     
     q_mean = np.mean(q[0, :, Nf//2:], axis=1)
-    dq_mean_dy = gradient_first(np.mean(q[0, :, Nf//2:], axis=1), dy)
+    # dq_mean_dy = gradient_first(np.mean(q[0, :, Nf//2:], axis=1), dy)
+    dq_mean_dy = np.mean(dq_dy[0, :, Nf//2:], axis=1)
     closure_mean = np.mean(closure[0, :, Nf//2:], axis=1)
     closure_mean_dy = gradient_first(closure_mean, dy)
-    mu_c = np.mean(closure[0, :, Nf//2:], axis=1)/dq_mean_dy
+    mu_c = closure_mean/dq_mean_dy
     # mu_c = np.mean(closure[0, :, Nf//2:], axis=1)/np.mean(dq_dy[0, :, Nf//2:], axis=1)
     # Filter
+    
     mu_c[mu_c >=0] = 0.0
+    mu_c[mu_c <=-0.1] = 0.0
+    mu_c = scipy.ndimage.gaussian_filter1d(mu_c, 5)
     
     mu_f = interpolate_c2f(mu_c)
     model  = nummodel
@@ -189,13 +196,13 @@ plt.show()
 omega = omega_data[-1, :]
 d_omega = gradient_first_c2f(omega, dy)
 omega_f = interpolate_c2f(omega)
-input  = torch.from_numpy(np.stack(((omega_f), d_omega)).T.astype(np.float32))
+input  = torch.from_numpy(np.stack((abs(omega_f), d_omega)).T.astype(np.float32))
 mu_f = -mymodel(input).detach().numpy().flatten()
 # mu_f[mu_f >= 0.0] = 0.0
 plt.figure()
 plt.plot(interpolate_c2f(yy), mu_f,  "-o", fillstyle = "none", label="nn")
 # plt.plot(yy, np.mean(omega_data, axis=0) - yy,  label="plug-in")
-# # plt.plot(yy, np.mean(omega_data, axis=0),  label="nn")
+# plt.plot(yy, np.mean(omega_data, axis=0),  label="nn")
 # plt.plot(yy, np.mean(q[0,:,:].T, axis=0) - yy,  label="truth")
 plt.legend()
 plt.show()

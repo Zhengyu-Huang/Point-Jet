@@ -8,7 +8,7 @@ from datetime import datetime
 
 
 
-data_dir_384 = "../data/beta_1.0_Gamma_1.0_relax_0.16/"
+data_dir_384 = "../data/beta_1.0_Gamma_1.0_relax_0.08/"
 
 def load_data(data_dir):
     closure = scipy.io.loadmat(data_dir+"data_closure_cons.mat")["data_closure_cons"]
@@ -47,7 +47,7 @@ dq_dy_mean = dq_dy_mean[chop_l:-chop_l]
 yy = yy[chop_l:-chop_l]
 mu_c = mu_c[chop_l:-chop_l]
 
-x_train  = torch.from_numpy(np.stack((q_mean, dq_dy_mean)).T.astype(np.float32))
+x_train  = torch.from_numpy(np.stack((q_mean_abs, dq_dy_mean)).T.astype(np.float32))
 y_train = torch.from_numpy(mu_c[:,np.newaxis].astype(np.float32))
 
 
@@ -74,7 +74,7 @@ n_epochs = 200000
 # model = torch.load("visc.model")
 
 for epoch in range(n_epochs):
-	y_pred = -torch.square(model(x_train)) #-model(x_train) 
+	y_pred = -model(x_train) #-torch.square(model(x_train)) #-model(x_train) 
 	loss = loss_fn(y_pred,y_train)*1000.0
 
 	optimizer.zero_grad()
@@ -84,7 +84,7 @@ for epoch in range(n_epochs):
 		print("[{}/{}], loss: {}, time {}".format(epoch, n_epochs, np.round(loss.item(), 3),datetime.now()))
 		torch.save(model, "visc.model")
 
-y_pred_train = -model(torch.from_numpy(np.stack((q_mean, dq_dy_mean)).T.astype(np.float32))).detach().numpy().flatten()**2
+y_pred_train = -model(torch.from_numpy(np.stack((q_mean_abs, dq_dy_mean)).T.astype(np.float32))).detach().numpy().flatten()
 
 # plot data
 plt.figure()
@@ -96,11 +96,12 @@ plt.show()
 
 
 plt.figure()
-# plt.plot(yy, closure_mean/dq_dy_mean, '--o', fillstyle="none", markevery = 1, markersize = 3, label="mu")
-plt.plot(yy, q_mean, '--o', fillstyle="none", markevery = 1, markersize = 3, label="q")
-plt.plot(yy, dq_dy_mean, '--o', fillstyle="none", markevery = 1, markersize = 3, label="dq_dy")
-plt.plot(yy, 100*mu_c,  '--o', fillstyle="none", markevery = 1, markersize = 3, label="filtered mu")
-plt.plot(yy, 100*y_pred_train,  '--o', fillstyle="none", markevery = 1, markersize = 3, label="NN(q, dq_dy)")
+# plt.plot(yy, q_mean, '--o', fillstyle="none", markevery = 1, markersize = 3, label="q")
+# plt.plot(yy, dq_dy_mean, '--o', fillstyle="none", markevery = 1, markersize = 3, label="dq_dy")
+
+plt.plot(yy, (closure_mean[chop_l:-chop_l]/dq_dy_mean), '--o', fillstyle="none", markevery = 1, markersize = 3, label="100*mu")
+plt.plot(yy, mu_c,  '--o', fillstyle="none", markevery = 1, markersize = 3, label="100*filtered mu")
+plt.plot(yy, y_pred_train,  '--o', fillstyle="none", markevery = 1, markersize = 3, label="100*NN(q, dq_dy)")
 
 # plt.xlim([-2,2])
 plt.legend()
