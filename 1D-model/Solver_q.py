@@ -141,7 +141,7 @@ omega_jet += 1*yy
 
 #model = lambda omega, tau, dy : nnmodel(DirectNet_20(1, 1), omega, tau, dy)
 
-tau_inv = "0.08"
+tau_inv = "0.16"
 # tau_inv = "0.16"
 tau = 1/float(tau_inv)
 data_dir = "../data/beta_1.0_Gamma_1.0_relax_" + tau_inv + "/"
@@ -175,6 +175,15 @@ if MODEL == "nummodel":
     
     mu_f = interpolate_c2f(mu_c)
     model  = nummodel
+
+    # tau_inv = "0.16"
+    # # tau_inv = "0.16"
+    # tau = 1/float(tau_inv)
+    # data_dir = "../data/beta_1.0_Gamma_1.0_relax_" + tau_inv + "/"
+    # dq_dy = scipy.io.loadmat(data_dir+"data_dq_dy.mat")["data_dq_dy"]
+    # closure = scipy.io.loadmat(data_dir+"data_closure_cons.mat")["data_closure_cons"]
+    # w = scipy.io.loadmat(data_dir+"data_w.mat")["data_w"]
+    # q = scipy.io.loadmat(data_dir+"data_q.mat")["data_q"]   
     
 elif MODEL == "nnmodel":
     mymodel = torch.load("visc.model")

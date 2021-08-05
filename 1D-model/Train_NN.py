@@ -8,7 +8,7 @@ from datetime import datetime
 
 
 
-data_dir_384 = "../data/beta_1.0_Gamma_1.0_relax_0.08/"
+data_dir_384 = "../data/beta_1.0_Gamma_1.0_relax_0.01/"
 
 def load_data(data_dir):
     closure = scipy.io.loadmat(data_dir+"data_closure_cons.mat")["data_closure_cons"]
