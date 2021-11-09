@@ -102,7 +102,6 @@ def nnmodel(torchmodel, omega, tau, dy):
 
     d_omega = gradient_first_c2f(omega, dy)
 
-
     omega_f = interpolate_c2f(omega)
     input  = torch.from_numpy(np.stack((abs(omega_f), d_omega)).T.astype(np.float32))
     mu_f = -torchmodel(input).detach().numpy().flatten()
