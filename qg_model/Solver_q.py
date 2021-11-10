@@ -72,7 +72,7 @@ def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
         psi = psi_sol(q, F1, F2, dy)
         dd_psi2 = gradient_second(psi[1, :], dy)
         q += dt*(f - model(q, yy, params))
-        # q[1, :] -= dt*mu*dd_psi2
+        q[1, :] -= dt*mu*dd_psi2
         
         if i%save_every == 0:
             q_data[i//save_every, :, :] = q
@@ -121,7 +121,7 @@ def nummodel(q, yy, params):
     dq1, dq2 = gradient_first_f2c(q1, dy), gradient_first_f2c(q2, dy)
     
     # todo
-    mu_t[:,:] = 1e-3
+    # mu_t[:,:] = 1e-3
     J1 = gradient_first_c2f(mu_t[0,:] * dq1, dy)
     J2 = gradient_first_c2f(mu_t[1,:] * dq2, dy)
     
