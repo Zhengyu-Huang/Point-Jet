@@ -14,7 +14,7 @@ import scipy.ndimage
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from Utility import gradient_first, gradient_second, gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c
+from Utility import gradient_first, gradient_second, gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c, psi_fft_sol
 
 
 
@@ -37,7 +37,7 @@ def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
 
 
     for i in range(1, Nt+1): 
-        psi = psi_sol(q, F1, F2, dy)
+        psi = psi_fft_sol(q, F1, F2, dy)
         dd_psi2 = gradient_second(psi[1, :], dy)
         q += dt*(f - model(q, yy, params))
         q[1, :] -= dt*mu*dd_psi2
@@ -93,7 +93,6 @@ def nummodel(q, yy, params):
     J1 = gradient_first_c2f(mu_t[0,:] * dq1, dy)
     J2 = gradient_first_c2f(mu_t[1,:] * dq2, dy)
     
-    print("q1 ", q1, "dq1 ", dq1)
     return np.vstack((J1, J2))
 
 
