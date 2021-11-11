@@ -12,44 +12,12 @@
 import scipy.io
 import scipy.ndimage
 import numpy as np
-from scipy.sparse.linalg import spsolve
-from scipy import sparse
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from Utility import gradient_first, gradient_second, gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c
 
 
-# solve psi from q
-def psi_sol(q, F1, F2, dy):
-    _, Ny = q.shape 
-    # right hand side
-    q_ext = np.zeros(2*(Ny - 1))
-    q_ext[0:Ny-1] = q[0, 0:Ny-1]
-    q_ext[Ny-1:2*(Ny - 1)] = q[1, 0:Ny-1]
-    # sparse matrix
-    
-    I, J, V = [], [], []
-    for i in range(Ny - 1):
-        I.extend([i, i, i, i, i])
-        J.extend([(i-1)%(Ny-1), i, (i+1)%(Ny-1), i, i+Ny-1])
-        V.extend([1/dy**2, -2/dy**2, 1/dy**2, -F1, F1])
-        
-        I.extend([i+Ny-1, i+Ny-1, i+Ny-1, i+Ny-1, i+Ny-1])
-        J.extend([(i-1)%(Ny-1)+Ny-1, i+Ny-1, (i+1)%(Ny-1)+Ny-1, i, i+Ny-1])
-        V.extend([1/dy**2, -2/dy**2, 1/dy**2, F2, -F2])
-        
-    
-    A = sparse.coo_matrix((V,(I,J)),shape=(2*(Ny - 1),2*(Ny - 1))).tocsr()
-    psi_ext = spsolve(A, q_ext)
-    
-    psi = np.zeros((2, Ny))
-    psi[0, 0:Ny-1] = psi_ext[0:Ny-1]
-    psi[0, Ny-1] = psi[0, 0]
-    psi[1, 0:Ny-1] = psi_ext[Ny-1:2*(Ny - 1)] 
-    psi[1, Ny-1] = psi[1, 0]
-    
-    return psi
-    
+
     
 # the model is a function: w,t ->  M(w)
 def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
