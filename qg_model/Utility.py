@@ -24,6 +24,7 @@ def gradient_second(omega, dx):
 def gradient(omega, dx, order):
     nx = len(omega)
     N = nx - 1 # open periodic domain
+    L = dx*N
     k2= np.zeros(N)
 
     if ((N%2)==0):
@@ -39,7 +40,7 @@ def gradient(omega, dx, order):
             
     domega = omega[0:-1]
     for i in range(order):
-        domega = ifft(1j*k2*fft(domega)).real
+        domega = 2*np.pi/L * ifft(1j*k2*fft(domega)).real
     
     return np.append(domega, domega[0])
 
@@ -123,6 +124,8 @@ def psi_fd_sol(q, F1, F2, dy):
 def psi_fft_sol(q, F1, F2, dy):
     _, nx = q.shape 
     N = nx - 1 # open periodic domain
+    L = dy*N
+    
     k2= np.zeros(N)
 
     if ((N%2)==0):
@@ -136,7 +139,7 @@ def psi_fft_sol(q, F1, F2, dy):
             k2[i]   =  i
             k2[N-i] = -i
 
-    ddx = -k2**2
+    ddx = - (2*np.pi/L)**2 * k2**2
 
     q_h   = np.zeros((2, N), dtype=np.complex)
     psi_h = np.zeros((2, N), dtype=np.complex)

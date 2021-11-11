@@ -14,14 +14,23 @@ import scipy.ndimage
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from Utility import gradient_first, gradient_second, gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c, psi_fft_sol
+from Utility import gradient_first, gradient_second, gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c, psi_fft_sol, gradient
 
 
-
+def hyperdiffusion(q, nu, hyper_n, dy):
+    q1 = q[0, :]
+    q2 = q[1, :]
+    
+    dnq1 = (-1)**hyper_n * nu*gradient(q1, dy, 2*hyper_n)
+    dnq2 = (-1)**hyper_n * nu*gradient(q2, dy, 2*hyper_n)
+    
+#     print("q1: ", q1, 2*hyper_n, nu*gradient(q1, dy, 2*hyper_n))
+    return -np.vstack((dnq1, dnq2))
     
 # the model is a function: w,t ->  M(w)
 def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
     L, dU, beta, mu, F1, F2 = params["L"], params["dU"], params["beta"], params["mu"], params["F1"], params["F2"]
+    nu, hyper_n = params["nu"], params["hyperdiffusion_order"]
     
     _, Ny = q0.shape
     yy, dy = np.linspace(0, L, Ny), L/(Ny - 1)
@@ -38,8 +47,9 @@ def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
 
     for i in range(1, Nt+1): 
         psi = psi_fft_sol(q, F1, F2, dy)
-        dd_psi2 = gradient_second(psi[1, :], dy)
-        q += dt*(f - model(q, yy, params))
+        dd_psi2 = gradient(psi[1, :], dy, 2)
+        q += dt*(f - model(q, yy, params) + hyperdiffusion(q, nu, hyper_n, dy))
+        # q += dt*(f + hyperdiffusion(q, nu, hyper_n, dy))
         q[1, :] -= dt*mu*dd_psi2
         
         if i%save_every == 0:
@@ -81,7 +91,8 @@ def postprocess_mu(pre_file, L, beta, last_n_outputs = 100):
 
 
 def nummodel(q, yy, params):
-    beta, dU, F1, F2, = params["beta"], params["dU"], params["F1"], params["F2"]
+    beta, dU, F1, F2 = params["beta"], params["dU"], params["F1"], params["F2"]
+    
     dy = yy[1] - yy[0]
     
     mu_t = mu_c 
@@ -125,7 +136,9 @@ params = {
     "beta": beta,
     "mu":   1e-6,
     "F1":   f0**2/(g*(rho[1] - rho[0])/rho[1] * H[0]),
-    "F2":   f0**2/(g*(rho[1] - rho[0])/rho[1] * H[1])
+    "F2":   f0**2/(g*(rho[1] - rho[0])/rho[1] * H[1]),
+    "nu":   5.0e13,
+    "hyperdiffusion_order": 2
     }
 # forcing
 f = np.zeros((2, Ny))
@@ -136,7 +149,7 @@ q0[1, :] = 1e-7 * np.cos(2*np.pi*yy/L)
 MODEL = "nummodel"
 
 dt = 1800
-Nt = 1000
+Nt = 5000
 
 
 if MODEL == "nummodel":
@@ -146,6 +159,9 @@ if MODEL == "nummodel":
     mu_c = np.zeros((2, Ny - 1))
     mu_c[0, :] = interpolate_f2c(mu_mean[0, :])
     mu_c[1, :] = interpolate_f2c(mu_mean[1, :])
+    
+    
+    # mu_c[:,:] = -np.abs(mu_c) 
     
     model = lambda q, yy, params : nummodel(q, yy, params)
 elif MODEL == "nnmodel":
