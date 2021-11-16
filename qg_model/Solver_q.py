@@ -48,9 +48,14 @@ def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
     for i in range(1, Nt+1): 
         psi = psi_fft_sol(q, F1, F2, dy)
         dd_psi2 = gradient(psi[1, :], dy, 2)
+        
+        # print(dt, q, model(q, yy, params),  hyperdiffusion(q, nu, hyper_n, dy), dt*mu*dd_psi2)
+        
+        
         q += dt*(f - model(q, yy, params) + hyperdiffusion(q, nu, hyper_n, dy))
-        # q += dt*(f + hyperdiffusion(q, nu, hyper_n, dy))
         q[1, :] -= dt*mu*dd_psi2
+        
+        
         
         if i%save_every == 0:
             q_data[i//save_every, :, :] = q
@@ -59,7 +64,7 @@ def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
 
     return  yy, t_data, q_data
 
-def postprocess_mu(pre_file, L, beta, last_n_outputs = 100):
+def postprocess_mu(pre_file, L, beta1, beta2, last_n_outputs = 100):
     
     u = np.load(pre_file + "u_data.npy")
     v = np.load(pre_file + "v_data.npy")
@@ -78,8 +83,10 @@ def postprocess_mu(pre_file, L, beta, last_n_outputs = 100):
         for j in range(nlayers):
             dq_zonal_mean[i, :, j] = gradient_first(q_zonal_mean[i, :, j], dy)
 
-
-    dpv_zonal_mean =  dq_zonal_mean + beta
+    
+    dpv_zonal_mean = np.copy(dq_zonal_mean)
+    dpv_zonal_mean[:, :, 0] =  dq_zonal_mean[:, :, 0] + beta1
+    dpv_zonal_mean[:, :, 1] =  dq_zonal_mean[:, :, 1] + beta2
 
     t_mean_steps = range(-last_n_outputs,-1)
     flux_mean    = np.mean(flux_zonal_mean[t_mean_steps, :, :], axis = 0)
@@ -90,19 +97,22 @@ def postprocess_mu(pre_file, L, beta, last_n_outputs = 100):
     return mu_mean.T
 
 
-def nummodel(q, yy, params):
+def nummodel(q, yy, params, mu_c):
     beta, dU, F1, F2 = params["beta"], params["dU"], params["F1"], params["F2"]
+    beta1, beta2 = beta + F1*dU, beta - F2*dU
     
     dy = yy[1] - yy[0]
     
-    mu_t = mu_c 
     q1, q2 = q[0, :], q[1, :]
     dq1, dq2 = gradient_first_f2c(q1, dy), gradient_first_f2c(q2, dy)
     
-    # todo
-    # mu_t[:,:] = 1e-3
-    J1 = gradient_first_c2f(mu_t[0,:] * dq1, dy)
-    J2 = gradient_first_c2f(mu_t[1,:] * dq2, dy)
+    
+    # todo 
+    mu_t = mu_c 
+    
+    
+    J1 = gradient_first_c2f(mu_t[0,:] * (dq1 + beta1), dy)
+    J2 = gradient_first_c2f(mu_t[1,:] * (dq2 + beta2), dy)
     
     return np.vstack((J1, J2))
 
@@ -124,60 +134,54 @@ def nnmodel(torchmodel, omega, tau, dy):
 
     
 
-Ny = 128
-L = 12.8e6
-f0, g = 1.0e-4, 10             # Coriolis parameter and gravitational constant
-H = [5000, 5000]               # the rest depths of each layer
-rho = [0.9, 1.0]               # the density of each layer
-beta = 1.5e-11
-params = {
-    "L":    L,
-    "dU":   5,
-    "beta": beta,
-    "mu":   1e-6,
-    "F1":   f0**2/(g*(rho[1] - rho[0])/rho[1] * H[0]),
-    "F2":   f0**2/(g*(rho[1] - rho[0])/rho[1] * H[1]),
-    "nu":   5.0e13,
-    "hyperdiffusion_order": 2
-    }
-# forcing
-f = np.zeros((2, Ny))
-yy = np.linspace(0, L, Ny)
-q0 = np.zeros((2, Ny))
-q0[0, :] = 1e-7 * np.sin(2*np.pi*yy/L)
-q0[1, :] = 1e-7 * np.cos(2*np.pi*yy/L)
-MODEL = "nummodel"
-
-dt = 1800
-Nt = 5000
-
-
-if MODEL == "nummodel":
-    pre_file = "/central/groups/esm/zhaoyi/geosphysicalflows_run/2layerqg/test1/"
-    last_n_outputs = 100
-    mu_mean = postprocess_mu(pre_file, L, beta, last_n_outputs)
-    mu_c = np.zeros((2, Ny - 1))
-    mu_c[0, :] = interpolate_f2c(mu_mean[0, :])
-    mu_c[1, :] = interpolate_f2c(mu_mean[1, :])
-    
-    
-    # mu_c[:,:] = -np.abs(mu_c) 
-    
-    model = lambda q, yy, params : nummodel(q, yy, params)
-elif MODEL == "nnmodel":
-    mymodel = torch.load("visc.model")
-    model = lambda omega, tau, dy : nnmodel(mymodel, omega, tau, dy)
-else:
-    print("ERROR")
-
-
-yy, t_data, q_data = explicit_solve(model, q0, f, params, dt = dt, Nt = Nt, save_every = 1)
-plt.figure()
-plt.plot(np.mean(q_data[:, 0, :], axis=0), yy,  label="top")
-plt.plot(np.mean(q_data[:, 1, :], axis=0), yy,  label="bottom")
-
-
-plt.ylabel("y")
-plt.legend()
-plt.show()
+def solve_q(Ny, L, f0, g, H, rho, beta, mu, dU, hyper_nu, hyper_order,
+            dt, Nt, save_every,
+            MODEL = "nummodel", mu_mean = [], clip_val = np.inf):
  
+    F1 = f0**2/(g*(rho[1] - rho[0])/rho[1] * H[0])
+    F2 = f0**2/(g*(rho[1] - rho[0])/rho[1] * H[1])
+    params = {
+        "L":    L,
+        "dU":   dU,
+        "beta": beta,
+        "mu":   mu,
+        "F1":   F1,
+        "F2":   F2,
+        "nu":   hyper_nu,
+        "hyperdiffusion_order": hyper_order
+        }
+
+    beta1, beta2 = beta + F1*dU, beta - F2*dU
+    
+    f = np.zeros((2, Ny))
+    yy = np.linspace(0, L, Ny)
+    
+    # initial condition
+    q0 = np.zeros((2, Ny))
+    q0[0, :] = 1e-2 * np.sin(2*np.pi*yy/L)
+    q0[1, :] = 1e-2 * np.cos(2*np.pi*yy/L)
+
+    if MODEL == "nummodel":
+        mu_c = np.zeros((2, Ny - 1))
+        mu_c[0, :] = interpolate_f2c(mu_mean[0, :])
+        mu_c[1, :] = interpolate_f2c(mu_mean[1, :])
+        mu_c[mu_c > clip_val] = clip_val
+        model = lambda q, yy, params : nummodel(q, yy, params, mu_c)
+    elif MODEL == "nnmodel":
+        mymodel = torch.load("visc.model")
+        model = lambda omega, tau, dy : nnmodel(mymodel, omega, tau, dy)
+    else:
+        print("ERROR")
+
+
+    yy, t_data, q_data = explicit_solve(model, q0, f, params, dt = dt, Nt = Nt, save_every = save_every)
+    
+    return yy, t_data, q_data
+#     plt.figure()
+#     plt.plot(np.mean(q_data[:, 0, :], axis=0), yy,  label="top")
+#     plt.plot(np.mean(q_data[:, 1, :], axis=0), yy,  label="bottom")
+
+
+#     plt.ylabel("y")
+#     plt.legend()
+#     plt.show()
