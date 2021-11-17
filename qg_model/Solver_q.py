@@ -24,7 +24,6 @@ def hyperdiffusion(q, nu, hyper_n, dy):
     dnq1 = (-1)**hyper_n * nu*gradient(q1, dy, 2*hyper_n)
     dnq2 = (-1)**hyper_n * nu*gradient(q2, dy, 2*hyper_n)
     
-#     print("q1: ", q1, 2*hyper_n, nu*gradient(q1, dy, 2*hyper_n))
     return -np.vstack((dnq1, dnq2))
     
 # the model is a function: w,t ->  M(w)
@@ -33,7 +32,7 @@ def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
     nu, hyper_n = params["nu"], params["hyperdiffusion_order"]
     
     _, Ny = q0.shape
-    yy, dy = np.linspace(0, L, Ny), L/(Ny - 1)
+    yy, dy = np.linspace(0, L - L/Ny, Ny), L/Ny
     
     t = 0.0
     
@@ -76,7 +75,7 @@ def postprocess_mu(pre_file, L, beta1, beta2, last_n_outputs = 100):
     q_zonal_mean = np.mean(q, axis = 1)
     dq_zonal_mean = np.copy(q_zonal_mean)
 
-    yy, dy = np.linspace(0, L, ny), L/(ny - 1)
+    yy, dy = np.linspace(0, L - L/ny, ny), L/ny
 
     flux_zonal_mean = np.mean(v * q, axis = 1)
     for i in range(nt):
@@ -154,7 +153,7 @@ def solve_q(Ny, L, f0, g, H, rho, beta, mu, dU, hyper_nu, hyper_order,
     beta1, beta2 = beta + F1*dU, beta - F2*dU
     
     f = np.zeros((2, Ny))
-    yy = np.linspace(0, L, Ny)
+    yy = np.linspace(0, L - L/Ny, Ny)
     
     # initial condition
     q0 = np.zeros((2, Ny))
@@ -162,7 +161,7 @@ def solve_q(Ny, L, f0, g, H, rho, beta, mu, dU, hyper_nu, hyper_order,
     q0[1, :] = 1e-2 * np.cos(2*np.pi*yy/L)
 
     if MODEL == "nummodel":
-        mu_c = np.zeros((2, Ny - 1))
+        mu_c = np.zeros((2, Ny))
         mu_c[0, :] = interpolate_f2c(mu_mean[0, :])
         mu_c[1, :] = interpolate_f2c(mu_mean[1, :])
         mu_c[mu_c > clip_val] = clip_val
@@ -177,11 +176,3 @@ def solve_q(Ny, L, f0, g, H, rho, beta, mu, dU, hyper_nu, hyper_order,
     yy, t_data, q_data = explicit_solve(model, q0, f, params, dt = dt, Nt = Nt, save_every = save_every)
     
     return yy, t_data, q_data
-#     plt.figure()
-#     plt.plot(np.mean(q_data[:, 0, :], axis=0), yy,  label="top")
-#     plt.plot(np.mean(q_data[:, 1, :], axis=0), yy,  label="bottom")
-
-
-#     plt.ylabel("y")
-#     plt.legend()
-#     plt.show()
