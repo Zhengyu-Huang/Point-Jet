@@ -12,6 +12,7 @@
 import scipy.io
 import scipy.ndimage
 import numpy as np
+import xarray as xr
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from Utility import gradient_first, gradient_second, gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c, psi_fft_sol, gradient
@@ -42,17 +43,22 @@ def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
     q_data = np.zeros((Nt//save_every+1, 2, Ny))
     t_data = np.zeros(Nt//save_every+1)
     q_data[0, :, :], t_data[0] = q, t
-
-
+    
+    tend = np.zeros((2, Ny))
+    
     for i in range(1, Nt+1): 
         psi = psi_fft_sol(q, F1, F2, dy)
         dd_psi2 = gradient(psi[1, :], dy, 2)
         
         # print(dt, q, model(q, yy, params),  hyperdiffusion(q, nu, hyper_n, dy), dt*mu*dd_psi2)
         
+        tend[:,:] = f - model(q, yy, params) + hyperdiffusion(q, nu, hyper_n, dy)
+        tend[1,:] -= mu*dd_psi2
         
-        q += dt*(f - model(q, yy, params) + hyperdiffusion(q, nu, hyper_n, dy))
-        q[1, :] -= dt*mu*dd_psi2
+#         print(tend)
+        q += dt * tend
+#         q += dt*(f - model(q, yy, params) + hyperdiffusion(q, nu, hyper_n, dy))
+#         q[1, :] -= dt*mu*dd_psi2
         
         
         
@@ -63,14 +69,37 @@ def explicit_solve(model, q0, f, params, dt = 1.0, Nt = 1000, save_every = 1):
 
     return  yy, t_data, q_data
 
-def postprocess_mu(pre_file, L, beta1, beta2, last_n_outputs = 100):
-    
-    u = np.load(pre_file + "u_data.npy")
-    v = np.load(pre_file + "v_data.npy")
-    q = np.load(pre_file + "q_data.npy")
-    psi = np.load(pre_file + "psi_data.npy")
-    nt, nx, ny, nlayers = u.shape
 
+def load_netcdf(pre_file, file_name, start, end, step):
+    
+    f = pre_file + file_name + '.' + str(start) + '.nc'
+    ds = xr.open_dataset(f, engine='h5netcdf')
+    _, nlayer, nx, ny = ds.data_vars['q'].values.shape
+    
+    nt = (end - start)//step + 1
+    u, v, q, psi = np.zeros((nt, nx, ny, nlayer)), np.zeros((nt, nx, ny, nlayer)), np.zeros((nt, nx, ny, nlayer)), np.zeros((nt, nx, ny, nlayer))
+    for i in range(nt):
+        f = pre_file + file_name + '.' + str(start + i*step) + '.nc'
+        ds = xr.open_dataset(f, engine='h5netcdf')
+        psi_h_i = ds.data_vars['ph']
+        psi_i = np.fft.irfftn(psi_h_i, axes=(-2,-1))
+        
+        u[i, :, :, 0]   = ds.data_vars['u'].values[0, 0, :, :].T
+        u[i, :, :, 1]   = ds.data_vars['u'].values[0, 1, :, :].T
+        v[i, :, :, 0]   = ds.data_vars['v'].values[0, 0, :, :].T
+        v[i, :, :, 1]   = ds.data_vars['v'].values[0, 1, :, :].T
+        q[i, :, :, 0]   = ds.data_vars['q'].values[0, 0, :, :].T
+        q[i, :, :, 1]   = ds.data_vars['q'].values[0, 1, :, :].T
+        psi[i, :, :, 0] = psi_i[0, 0, :, :].T
+        psi[i, :, :, 1] = psi_i[0, 1, :, :].T
+    
+    
+    return u, v, q, psi
+
+
+# 7
+def postprocess_mu_helper(u, v, q, psi, L, beta1, beta2):
+    nt, nx, ny, nlayers = u.shape
 
     q_zonal_mean = np.mean(q, axis = 1)
     dq_zonal_mean = np.copy(q_zonal_mean)
@@ -87,18 +116,44 @@ def postprocess_mu(pre_file, L, beta1, beta2, last_n_outputs = 100):
     dpv_zonal_mean[:, :, 0] =  dq_zonal_mean[:, :, 0] + beta1
     dpv_zonal_mean[:, :, 1] =  dq_zonal_mean[:, :, 1] + beta2
 
-    t_mean_steps = range(-last_n_outputs,-1)
-    flux_mean    = np.mean(flux_zonal_mean[t_mean_steps, :, :], axis = 0)
-    dpv_mean     = np.mean(dpv_zonal_mean[t_mean_steps, :, :], axis = 0)
-
+    flux_mean    = np.mean(flux_zonal_mean, axis = 0)
+    dpv_mean     = np.mean(dpv_zonal_mean, axis = 0)
+    
+    # todo  further average
+    flux_mean[:, 0] = np.mean(flux_mean[:, 0])
     mu_mean = flux_mean / dpv_mean
 
     return mu_mean.T
+
+# 4/5 args
+def postprocess_mu_gf(pre_file, L, beta1, beta2, last_n_outputs = 100):
+    
+    u = np.load(pre_file + "u_data.npy")
+    v = np.load(pre_file + "v_data.npy")
+    q = np.load(pre_file + "q_data.npy")
+    psi = np.load(pre_file + "psi_data.npy")
+    
+    return postprocess_mu_helper(u[last_n_outputs:-1, :, :], v[last_n_outputs:-1, :, :], 
+                          q[last_n_outputs:-1, :, :], psi[last_n_outputs:-1, :, :], 
+                          L, beta1, beta2, last_n_outputs)
+
+
+# 8 args
+def postprocess_mu_pyqg(pre_file, file_name, start, end, step, L, beta1, beta2):
+    
+    u, v, q, psi = load_netcdf(pre_file, file_name, start, end, step)
+    
+    return postprocess_mu_helper(u, v, 
+                          q, psi, 
+                          L, beta1, beta2)
+
 
 
 def nummodel(q, yy, params, mu_c):
     beta, dU, F1, F2 = params["beta"], params["dU"], params["F1"], params["F2"]
     beta1, beta2 = beta + F1*dU, beta - F2*dU
+    
+    # beta1, beta2 = beta + F1*dU, beta + F2*dU
     
     dy = yy[1] - yy[0]
     
@@ -110,8 +165,32 @@ def nummodel(q, yy, params, mu_c):
     mu_t = mu_c 
     
     
+    # mu_t[1,:] = scipy.ndimage.gaussian_filter1d(mu_t[1,:], 5)
+    
     J1 = gradient_first_c2f(mu_t[0,:] * (dq1 + beta1), dy)
     J2 = gradient_first_c2f(mu_t[1,:] * (dq2 + beta2), dy)
+    
+    return np.vstack((J1, J2))
+
+
+def nummodel_fft(q, yy, params, mu_c):
+    beta, dU, F1, F2 = params["beta"], params["dU"], params["F1"], params["F2"]
+    beta1, beta2 = beta + F1*dU, beta - F2*dU
+    
+    # beta1, beta2 = beta + F1*dU, beta + F2*dU
+    
+    dy = yy[1] - yy[0]
+    
+    q1, q2 = q[0, :], q[1, :]
+    dq1, dq2 = gradient(q1, dy, 1), gradient_first_f2c(q2, dy, 1)
+    
+    
+    # todo 
+    mu_t = mu_c 
+    
+    
+    J1 = gradient(mu_t[0,:] * (dq1 + beta1), dy, 1)
+    J2 = gradient(mu_t[1,:] * (dq2 + beta2), dy, 1)
     
     return np.vstack((J1, J2))
 
@@ -133,12 +212,10 @@ def nnmodel(torchmodel, omega, tau, dy):
 
     
 
-def solve_q(Ny, L, f0, g, H, rho, beta, mu, dU, hyper_nu, hyper_order,
+def solve_q(Ny, L, F1, F2, beta, mu, dU, hyper_nu, hyper_order, q0,
             dt, Nt, save_every,
             MODEL = "nummodel", mu_mean = [], clip_val = np.inf):
  
-    F1 = f0**2/(g*(rho[1] - rho[0])/rho[1] * H[0])
-    F2 = f0**2/(g*(rho[1] - rho[0])/rho[1] * H[1])
     params = {
         "L":    L,
         "dU":   dU,
@@ -152,13 +229,15 @@ def solve_q(Ny, L, f0, g, H, rho, beta, mu, dU, hyper_nu, hyper_order,
 
     beta1, beta2 = beta + F1*dU, beta - F2*dU
     
+    # beta1, beta2 = beta + F1*dU, beta + F2*dU
+    
     f = np.zeros((2, Ny))
     yy = np.linspace(0, L - L/Ny, Ny)
     
     # initial condition
-    q0 = np.zeros((2, Ny))
-    q0[0, :] = 1e-2 * np.sin(2*np.pi*yy/L)
-    q0[1, :] = 1e-2 * np.cos(2*np.pi*yy/L)
+#     q0 = np.zeros((2, Ny))
+#     q0[0, :] = 1e-2 * np.sin(2*np.pi*yy/L)
+#     q0[1, :] = 1e-2 * np.cos(2*np.pi*yy/L)
 
     if MODEL == "nummodel":
         mu_c = np.zeros((2, Ny))
