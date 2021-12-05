@@ -157,7 +157,6 @@ def preprocess_data(file_name, beta, lam, dU, L, start=3000000, end=6000000, ste
 
 
     pre_file  = '/central/groups/esm/zhaoyi/pyqg_run/2layer/' + file_name + '/'
-    start, end, step = 3000000, 6000000, 20000
     u, v, q, psi = load_netcdf(pre_file, file_name, start, end, step)
     
     nt, nx, ny, nlayers = u.shape
@@ -175,7 +174,19 @@ def preprocess_data(file_name, beta, lam, dU, L, start=3000000, end=6000000, ste
         for j in range(nlayers):
             dq_zonal_mean[i, :, j] = gradient_first(q_zonal_mean[i, :, j], dy)
             vor_zonal_mean[i, :, j] = gradient_first(u_zonal_mean[i, :, j], dy)
-
+    
+    
+    # compute psi variance
+    psi_var_2 = np.copy(psi)
+    for i in range(nt):
+        for j in range(nx):
+            psi_var_2[i, j, :, :] -= psi_zonal_mean[i, :, :]
+            
+    psi_var_2 **= 2
+    psi_var_2_zonal_mean = np.mean(psi_var_2, axis = 1)
+    
+    
+    
     dpv_zonal_mean =  np.copy(dq_zonal_mean)
     dpv_zonal_mean[:,:, 0] += beta1
     dpv_zonal_mean[:,:, 1] += beta2    
@@ -188,12 +199,12 @@ def preprocess_data(file_name, beta, lam, dU, L, start=3000000, end=6000000, ste
     u_mean         = np.mean(u_zonal_mean[t_mean_steps, :, :],    axis = 0)
     vor_mean         = np.mean(vor_zonal_mean[t_mean_steps, :, :],    axis = 0)
     psi_mean = np.mean(psi_zonal_mean[t_mean_steps, :, :],    axis = 0)
-
+    psi_var_2_mean = np.mean(psi_var_2_zonal_mean[t_mean_steps, :, :],    axis = 0)
     # mu is positive
     mu_mean = -flux_mean / dpv_mean
 
     
-    return [mu_mean.T, dpv_mean.T, u_mean.T, vor_mean.T, q_mean.T, psi_mean.T, flux_mean.T], [q_zonal_mean, dq_zonal_mean]
+    return [mu_mean.T, dpv_mean.T, u_mean.T, vor_mean.T, q_mean.T, psi_mean.T, flux_mean.T, psi_var_2_mean.T], [q_zonal_mean, dq_zonal_mean]
 
 
 
