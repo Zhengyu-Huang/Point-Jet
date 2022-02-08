@@ -95,7 +95,7 @@ def implicit_solve(model_jac, f,  dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
 
 
  
-def nummodel(q, yy, res):
+def nummodel(permeability, q, yy, res):
     
     Ny = yy.size
     dy = yy[1] - yy[0]
@@ -105,7 +105,7 @@ def nummodel(q, yy, res):
     res[:] = gradient_first_c2f(mu_c*(dq_c), dy)
     
 
-def nummodel_jac(q, yy, dt, res, V):
+def nummodel_jac(permeability, q, yy, dt,  res, V):
     
     Ny = yy.size
     dy = yy[1] - yy[0]
@@ -127,7 +127,7 @@ def nummodel_jac(q, yy, dt, res, V):
     return res, V
 
 
-def nnmodel(torchmodel, omega, tau, dy):
+def nnmodel_jac(torchmodel, omega, tau, dy):
     # return np.zeros(len(omega))
     # a0, a1, b0, b1 = 0.2, 0.3, 0.4, 0.5
 
@@ -144,46 +144,5 @@ def nnmodel(torchmodel, omega, tau, dy):
 
     return M
 
-def permeability(q):
-    # return q * (1 - q)
-    return 0.5  + np.zeros(q.size)   
-
-Ny = 100
-L = 1.0
-yy, dy = np.linspace(0, L, Ny), L/(Ny - 1)
-f = np.sin(2*np.pi*yy)
-yy = np.linspace(0, L, Ny)
-MODEL = "imp_nummodel"
-
-q_sol = 1/0.5 * 1/(2*np.pi)**2 * f
-
-if MODEL == "exp_nummodel":
-
-    model = lambda q, yy, res : nummodel(q, yy, res)
-    yy, t_data, q_data = explicit_solve(model, f, dt = 1.0e-4, Nt = 10000, save_every = 1, L = L)
-
-elif MODEL == "imp_nummodel":
-    
-    model = lambda q, yy, dt, res, V : nummodel_jac(q, yy, dt, res, V)  
-    yy, t_data, q_data = implicit_solve(model, f, dt = 1.0e-2, Nt = 100, save_every = 1, L = L)
-      
-elif MODEL == "nnmodel":
-    
-    mymodel = torch.load("visc.model")
-    model = lambda omega, tau, dy : nnmodel(mymodel, omega, tau, dy)
-    
-else:
-    print("ERROR")
 
 
-plt.figure()
-# plt.plot(yy, np.mean(q_data[0, :], axis=0),  label="top")
-# plt.plot(yy, np.mean(q_data[1, :], axis=0),  label="bottom")
-
-plt.plot(yy, q_data[-1, :],  label="q")
-plt.plot(yy, q_sol,  label="q ref")
-
-plt.xlabel("y")
-plt.legend()
-plt.show()
- 
