@@ -18,7 +18,7 @@ from NeuralNet import *
     
 # the model is a function: q,t ->  M(q)
 # the solution points are at cell faces
-def explicit_solve(model, f,  dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
+def explicit_solve(model, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
     
     Ny = f.size
     yy = np.linspace(0, L, Ny)
@@ -26,7 +26,7 @@ def explicit_solve(model, f,  dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
     t = 0.0
     # qi are periodic (qi[0] == qi[-1])
     q = np.zeros(Ny)
-    
+    q[0], q[-1] = dbc[0], dbc[1]
     # prepare data storage
     q_data = np.zeros((Nt//save_every+1, Ny))
     t_data = np.zeros(Nt//save_every+1)
@@ -48,7 +48,7 @@ def explicit_solve(model, f,  dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
 
 # the model is a function: q,t ->  M(q)
 # the solution points are at cell faces
-def implicit_solve(model_jac, f,  dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
+def implicit_solve(model_jac, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
     
     Ny = f.size
     yy = np.linspace(0, L, Ny)
@@ -56,6 +56,7 @@ def implicit_solve(model_jac, f,  dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
     t = 0.0
     # qi are periodic (qi[0] == qi[-1])
     q = np.zeros(Ny)
+    q[0], q[-1] = dbc[0], dbc[1]
     
     # prepare data storage
     q_data = np.zeros((Nt//save_every+1, Ny))
@@ -89,7 +90,7 @@ def implicit_solve(model_jac, f,  dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
         if i%save_every == 0:
             q_data[i//save_every, :] = q
             t_data[i//save_every] = i*dt
-            print(i, "max q", np.max(q))
+            print(i, "max q: ", np.max(q), " L2 res: ", np.linalg.norm(f[1:Ny-1] + res))
 
     return  yy, t_data, q_data
 
@@ -112,6 +113,7 @@ def nummodel_jac(permeability, q, yy, dt,  res, V):
     dq = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
     mu_c = permeability(q_c)
+    # mu_c = interpolate_f2c(permeability(q))
     res[:] = gradient_first_c2f(mu_c*(dq), dy)
     
     V[:] = 0
