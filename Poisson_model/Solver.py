@@ -25,8 +25,8 @@ def explicit_solve(model, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
     
     t = 0.0
     # qi are periodic (qi[0] == qi[-1])
-    q = np.zeros(Ny)
-    q[0], q[-1] = dbc[0], dbc[1]
+    q = np.linspace(dbc[0], dbc[1], Ny)
+    # q[0], q[-1] = dbc[0], dbc[1]
     # prepare data storage
     q_data = np.zeros((Nt//save_every+1, Ny))
     t_data = np.zeros(Nt//save_every+1)
@@ -55,10 +55,9 @@ def implicit_solve(model_jac, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1
     
     t = 0.0
     # qi are periodic (qi[0] == qi[-1])
-    q = np.zeros(Ny)
+    q = np.linspace(dbc[0], dbc[1], Ny)
     # q = -yy*(yy - 1)
-    
-    q[0], q[-1] = dbc[0], dbc[1]
+    # q[0], q[-1] = dbc[0], dbc[1]
     
     # prepare data storage
     q_data = np.zeros((Nt//save_every+1, Ny))
@@ -87,7 +86,7 @@ def implicit_solve(model_jac, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1
         model_jac(q, yy, dt, res, V)
         A = sparse.coo_matrix((V,(I,J)),shape=(Ny-2,Ny-2)).tocsc()
         q[1:Ny-1] += spsolve(A, dt*(f[1:Ny-1] + res))
-        
+
         
         if i%save_every == 0:
             q_data[i//save_every, :] = q
@@ -115,6 +114,7 @@ def nummodel_jac(permeability, q, yy, dt,  res, V):
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q) 
     mu_c = permeability(q_c, dq_c)
+    
     res[:] = gradient_first_c2f(mu_c*(dq_c), dy)
     
     V[:] = 0
