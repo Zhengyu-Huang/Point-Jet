@@ -56,6 +56,8 @@ def implicit_solve(model_jac, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1
     t = 0.0
     # qi are periodic (qi[0] == qi[-1])
     q = np.zeros(Ny)
+    # q = -yy*(yy - 1)
+    
     q[0], q[-1] = dbc[0], dbc[1]
     
     # prepare data storage
@@ -102,7 +104,7 @@ def nummodel(permeability, q, yy, res):
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
-    mu_c = permeability(q_c)
+    mu_c = permeability(q_c, dq_c)
     res[:] = gradient_first_c2f(mu_c*(dq_c), dy)
     
 
@@ -110,11 +112,10 @@ def nummodel_jac(permeability, q, yy, dt,  res, V):
     
     Ny = yy.size
     dy = yy[1] - yy[0]
-    dq = gradient_first_f2c(q, dy)
-    q_c = interpolate_f2c(q)
-    mu_c = permeability(q_c)
-    # mu_c = interpolate_f2c(permeability(q))
-    res[:] = gradient_first_c2f(mu_c*(dq), dy)
+    dq_c = gradient_first_f2c(q, dy)
+    q_c = interpolate_f2c(q) 
+    mu_c = permeability(q_c, dq_c)
+    res[:] = gradient_first_c2f(mu_c*(dq_c), dy)
     
     V[:] = 0
     
@@ -129,22 +130,22 @@ def nummodel_jac(permeability, q, yy, dt,  res, V):
     return res, V
 
 
-def nnmodel_jac(torchmodel, omega, tau, dy):
-    # return np.zeros(len(omega))
-    # a0, a1, b0, b1 = 0.2, 0.3, 0.4, 0.5
+# def nnmodel_jac(torchmodel, omega, tau, dy):
+#     # return np.zeros(len(omega))
+#     # a0, a1, b0, b1 = 0.2, 0.3, 0.4, 0.5
 
-    d_omega = gradient_first_c2f(omega, dy)
+#     d_omega = gradient_first_c2f(omega, dy)
 
-    omega_f = interpolate_c2f(omega)
-    input  = torch.from_numpy(np.stack((abs(omega_f), d_omega)).T.astype(np.float32))
-    mu_f = -torchmodel(input).detach().numpy().flatten()
-    mu_f[mu_f >= 0.0] = 0.0
+#     omega_f = interpolate_c2f(omega)
+#     input  = torch.from_numpy(np.stack((abs(omega_f), d_omega)).T.astype(np.float32))
+#     mu_f = -torchmodel(input).detach().numpy().flatten()
+#     mu_f[mu_f >= 0.0] = 0.0
 
-    mu_f = scipy.ndimage.gaussian_filter1d(mu_f, 5)
+#     mu_f = scipy.ndimage.gaussian_filter1d(mu_f, 5)
     
-    M = gradient_first_f2c(mu_f*(d_omega), dy)
+#     M = gradient_first_f2c(mu_f*(d_omega), dy)
 
-    return M
+#     return M
 
 
 
