@@ -87,7 +87,7 @@ def implicit_solve(model_jac, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1
         # print("error : ", np.linalg.norm(sparse.coo_matrix((V,(I,J)),shape=(Ny-2,Ny-2)).tocsc() * q[1:Ny-1] - res) )
         
         V *= -dt
-        V[0:-1:3] += 1.0
+        V[0::3] += 1.0
         
         A = sparse.coo_matrix((V,(I,J)),shape=(Ny-2,Ny-2)).tocsc()
         q[1:Ny-1] += spsolve(A, dt*(f[1:Ny-1] + res))
@@ -152,7 +152,7 @@ def implicit_Newton_solve(model_jac, f, dbc, dt = 1.0, Nt = 1000, save_every = 1
             model_jac(q, yy, res, V)
             
             V *= -dt
-            V[0:-1:3] += 1.0
+            V[0::3] += 1.0
             A = sparse.coo_matrix((V,(I,J)),shape=(Ny-2,Ny-2)).tocsc()
 
             res_all = q[1:Ny-1] - q_old[1:Ny-1]  - dt*(f[1:Ny-1] + res)
@@ -226,8 +226,7 @@ def nummodel_jac(permeability, q, yy, res, V, exact = False, D_permeability = No
             # -1 diagonal
             V[3*(i + 1) - 1] -= (q[i+2] - q[i+1])/dy**2 * (1/2 * Dq_c[i+1] - Ddq_c[i+1]/dy)
         
-            
-          
+               
     return res, V
 
 
