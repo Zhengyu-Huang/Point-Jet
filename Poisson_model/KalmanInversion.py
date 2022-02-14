@@ -2,13 +2,13 @@ import numpy as np
 from scipy.linalg import block_diag
 
 """
-UKIObj{FT<:AbstractFloat, IT<:Int}
+UKI{FT<:AbstractFloat, IT<:Int}
 Struct that is used in Unscented Kalman Inversion (UKI)
 For solving the inverse problem 
     y = G(theta) + eta
     
 """
-class UKIObj:
+class UKI:
     def __init__(self, theta_names,theta0_mean, theta0_cov, y,
                 Sigma_eta,alpha_reg, update_freq,
                 modified_uscented_transform = True):
@@ -98,7 +98,7 @@ class UKIObj:
 
 
 """
-UKIObj Constructor 
+UKI Constructor 
 parameter_names::Array{String,1} : parameter name vector
 theta0_mean::Array{FT} : prior mean
 theta0_cov::Array{FT, 2} : prior covariance
@@ -329,7 +329,7 @@ def UKI_Run(s_param, forward,
     theta_names = s_param.theta_names
     
     
-    ukiobj = UKIObj(theta_names ,
+    ukiobj = UKI(theta_names ,
     theta0_mean, 
     theta0_cov,
     y,
@@ -439,7 +439,7 @@ if __name__ == "__main__":
     fig.tight_layout()
     plt.show()
        
-# function plot_param_iter(ukiobj::UKIObj{FT, IT}, theta_ref::Array{FT,1}, theta_ref_names::Array{String}) where {FT<:AbstractFloat, IT<:Int}
+# function plot_param_iter(ukiobj::UKI{FT, IT}, theta_ref::Array{FT,1}, theta_ref_names::Array{String}) where {FT<:AbstractFloat, IT<:Int}
     
 #     theta_mean = ukiobj.theta_mean
 #     theta_cov = ukiobj.theta_cov
@@ -469,7 +469,7 @@ if __name__ == "__main__":
 # end
 
 
-# function plot_opt_errors(ukiobj::UKIObj{FT, IT}, 
+# function plot_opt_errors(ukiobj::UKI{FT, IT}, 
 #     theta_ref::Union{Array{FT,1}, Nothing} = nothing, 
 #     transform_func::Union{Function, Nothing} = nothing) where {FT<:AbstractFloat, IT<:Int}
     
