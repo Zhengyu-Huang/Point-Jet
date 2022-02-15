@@ -187,8 +187,18 @@ def nummodel(permeability, q, yy, res):
     q_c = interpolate_f2c(q)
     mu_c = permeability(q_c, dq_c)
     res[:] = gradient_first_c2f(mu_c*(dq_c), dy)
-    
 
+# dM/dx    
+def nummodel_flux(flux, q, yy, res):
+    
+    Ny = yy.size
+    dy = yy[1] - yy[0]
+    dq_c = gradient_first_f2c(q, dy)
+    q_c = interpolate_f2c(q)
+    M_c = flux(q_c, dq_c)
+    res[:] = gradient_first_c2f(M_c, dy)
+
+    
 def nummodel_jac(permeability, q, yy, res, V, exact = False, D_permeability = None):
     
     Ny = yy.size
