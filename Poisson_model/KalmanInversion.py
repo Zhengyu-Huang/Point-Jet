@@ -10,7 +10,7 @@ For solving the inverse problem
 """
 class UKI:
     def __init__(self, theta_names,theta0_mean, theta0_cov, y,
-                Sigma_eta,alpha_reg, update_freq,
+                Sigma_eta,alpha_reg,  gamma, update_freq,
                 modified_uscented_transform = True):
 
         N_theta = theta0_mean.size
@@ -51,8 +51,8 @@ class UKI:
         y_pred = []  # array of Array{FT, 2}'s
     
 
-        Sigma_omega = (2 - alpha_reg**2)*theta0_cov
-        Sigma_nu = 2*Sigma_eta
+        Sigma_omega = (gamma + 1 - alpha_reg**2)*theta0_cov
+        Sigma_nu = (gamma + 1)/gamma*Sigma_eta
 
         r = theta0_mean
         
@@ -87,6 +87,8 @@ class UKI:
         self.Sigma_nu = Sigma_nu
         "regularization parameter"
         self.alpha_reg = alpha_reg 
+        "gamma for the error covariance matrices"
+        self.gamma = gamma
         "regularization vector"
         self.r = r
         "update frequency"
@@ -119,7 +121,7 @@ def construct_sigma_ensemble(uki, x_mean, x_cov):
 
     c_weights = uki.c_weights
 
-    chol_xx_cov = np.linalg.cholesky(x_cov)  #cholesky(Hermitian(x_cov)).L
+    chol_xx_cov = np.linalg.cholesky((x_cov + x_cov.T)/2.0)  #cholesky(Hermitian(x_cov)).L
 
     x = np.zeros((2*N_x+1, N_x))
     x[0, :] = x_mean
@@ -180,7 +182,18 @@ def construct_cov(uki, x, x_mean, y, y_mean):
     return xy_cov
 
 
-
+def reset_step(uki, gamma):
+    uki.gamma = gamma
+    
+    uki.theta_mean.pop()
+    "a vector of arrays of size N_ensemble x (N_parameters x N_parameters) containing the covariance of the parameters (in each uki iteration a new array of cov is added)"
+    uki.theta_cov.pop()
+    "a vector of arrays of size N_ensemble x N_y containing the predicted observation (in each uki iteration a new array of predicted observation is added)"
+    uki.y_pred.pop()
+    "current iteration number"
+    uki.iter -= 1
+    
+    
 
 # """
 # update uki struct
@@ -244,10 +257,10 @@ def construct_cov(uki, x, x_mean, y, y_mean):
 
 def update_prediction(uki):
     
-    uki.iter += 1
     # update evolution covariance matrix
-    if uki.update_freq > 0 and uki.iter%uki.update_freq == 0:
-        uki.Sigma_omega = (2 - uki.alpha_reg**2) * uki.theta_cov[-1]
+    if uki.update_freq > 0 and (uki.iter + 1)%uki.update_freq == 0:
+        uki.Sigma_omega = (uki.gamma + 1 - uki.alpha_reg**2) * uki.theta_cov[-1]
+        uki.Sigma_nu = (uki.gamma + 1)/uki.gamma * uki.Sigma_eta
 
 
     theta_mean  = uki.theta_mean[-1]
@@ -290,15 +303,18 @@ def update_analysis(uki, theta_p, g):
 
     tmp = np.linalg.solve(gg_cov.T, thetag_cov.T).T 
 
+    
+    
     theta_mean =  theta_p_mean + np.matmul(tmp, (y - g_mean))
-
     theta_cov =  theta_p_cov - np.matmul(tmp, thetag_cov.T)
+    
+    
+    return theta_mean, theta_cov
 
-
-    ########### Save resutls
-    uki.y_pred.append(g_mean) # N_ens x N_data
-    uki.theta_mean.append(theta_mean) # N_ens x N_params
-    uki.theta_cov.append(theta_cov) # N_ens x N_data
+#     ########### Save resutls
+#     uki.y_pred.append(g_mean) # N_ens x N_data
+#     uki.theta_mean.append(theta_mean) # N_ens x N_params
+#     uki.theta_cov.append(theta_cov) # N_ens x N_data
 
 
 
@@ -321,6 +337,7 @@ def UKI_Run(s_param, forward,
     theta0_mean, theta0_cov,
     y, Sigma_eta,
     alpha_reg,
+    gamma,
     update_freq,
     N_iter,
     modified_uscented_transform = True,
@@ -335,6 +352,7 @@ def UKI_Run(s_param, forward,
     y,
     Sigma_eta,
     alpha_reg,
+    gamma,
     update_freq,
     modified_uscented_transform = modified_uscented_transform)
     
@@ -347,16 +365,45 @@ def UKI_Run(s_param, forward,
     
     
     
-    for i in range(N_iter):
+    opt_errors = []
+    
+    i = 0
+    while i < N_iter:
         
         theta_p = update_prediction(ukiobj) 
         g = ens_func(theta_p)
-        update_analysis(ukiobj, theta_p, g) 
+        theta_mean, theta_cov = update_analysis(ukiobj, theta_p, g) 
+        y_pred = ens_func( np.reshape(theta_mean, (1, len(theta_mean)))).flatten()
+        
+        print(y_pred.shape, ukiobj.y.shape)
+        opt_error = 0.5*np.dot((y_pred - ukiobj.y) , np.linalg.solve(ukiobj.Sigma_eta, (y_pred - ukiobj.y)))
+        
+        
+        if i > 0 and opt_error > opt_errors[-1]:
+            
+            # reset_step(ukiobj, ukiobj.gamma/2)
+            ukiobj.gamma = ukiobj.gamma/2.0
+#             i -= 1
+#             print("!!!!!! reduce ukiobj.gamma : ", ukiobj.gamma, " errors are : ", opt_error, opt_errors[-1])
+        else:
+            ukiobj.gamma = np.minimum(1.0, 2.0*ukiobj.gamma)
+            
+        ukiobj.y_pred.append(y_pred) # N_ens x N_data
+        ukiobj.theta_mean.append(theta_mean) # N_ens x N_params
+        ukiobj.theta_cov.append(theta_cov) # N_ens x N_data
+        ukiobj.iter += 1
+        opt_errors.append(opt_error)
+            
+            
+        print("ukiobj.gamma : ", ukiobj.gamma)
+        print("len(ukiobj.opt_error) : ", i, len(opt_errors))
+        print( "optimization error at iter ", i, " = ", opt_errors[i] )
+        print("len(ukiobj.theta_cov) : ", i, len(ukiobj.theta_cov))
+        print( "Frobenius norm of the covariance at iter ", i, " = ", np.linalg.norm(ukiobj.theta_cov[i]) ) 
+        
+        
 
-        print( "optimization error at iter ", i, " = ", 0.5*np.dot((ukiobj.y_pred[i] - ukiobj.y) , np.linalg.solve(ukiobj.Sigma_eta, (ukiobj.y_pred[i] - ukiobj.y))) )
-        print( "Frobenius norm of the covariance at iter ", i, " = ", np.linalg.norm(ukiobj.theta_cov[i]) )
-
-    
+        i += 1
     return ukiobj
     
 
