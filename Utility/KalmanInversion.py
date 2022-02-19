@@ -9,8 +9,8 @@ For solving the inverse problem
     
 """
 class UKI:
-    def __init__(self, theta_names,theta0_mean, theta0_cov, y,
-                Sigma_eta,alpha_reg,  gamma, update_freq,
+    def __init__(self, theta_names,theta0_mean, theta0_init, theta0_cov, y,
+                Sigma_eta,alpha_reg,  gamma, update_freq, 
                 modified_uscented_transform = True):
 
         N_theta = theta0_mean.size
@@ -44,7 +44,7 @@ class UKI:
         
 
         theta_mean = []  # array of Array{FT, 2}'s
-        theta_mean.append(theta0_mean) # insert parameters at end of array (in this case just 1st entry)
+        theta_mean.append(theta0_init) # insert parameters at end of array (in this case just 1st entry)
         theta_cov = [] # array of Array{FT, 2}'s
         theta_cov.append(theta0_cov) # insert parameters at end of array (in this case just 1st entry)
 
@@ -121,7 +121,12 @@ def construct_sigma_ensemble(uki, x_mean, x_cov):
 
     c_weights = uki.c_weights
 
-    chol_xx_cov = np.linalg.cholesky((x_cov + x_cov.T)/2.0)  #cholesky(Hermitian(x_cov)).L
+    # chol_xx_cov = np.linalg.cholesky((x_cov + x_cov.T)/2.0)  #cholesky(Hermitian(x_cov)).L
+    
+    
+    u, s, _ = np.linalg.svd(x_cov, full_matrices=True)
+    chol_xx_cov = u * np.sqrt(s)
+    
 
     x = np.zeros((2*N_x+1, N_x))
     x[0, :] = x_mean
@@ -182,16 +187,16 @@ def construct_cov(uki, x, x_mean, y, y_mean):
     return xy_cov
 
 
-def reset_step(uki, gamma):
-    uki.gamma = gamma
+# def reset_step(uki, gamma):
+#     uki.gamma = gamma
     
-    uki.theta_mean.pop()
-    "a vector of arrays of size N_ensemble x (N_parameters x N_parameters) containing the covariance of the parameters (in each uki iteration a new array of cov is added)"
-    uki.theta_cov.pop()
-    "a vector of arrays of size N_ensemble x N_y containing the predicted observation (in each uki iteration a new array of predicted observation is added)"
-    uki.y_pred.pop()
-    "current iteration number"
-    uki.iter -= 1
+#     uki.theta_mean.pop()
+#     "a vector of arrays of size N_ensemble x (N_parameters x N_parameters) containing the covariance of the parameters (in each uki iteration a new array of cov is added)"
+#     uki.theta_cov.pop()
+#     "a vector of arrays of size N_ensemble x N_y containing the predicted observation (in each uki iteration a new array of predicted observation is added)"
+#     uki.y_pred.pop()
+#     "current iteration number"
+#     uki.iter -= 1
     
     
 
@@ -288,6 +293,7 @@ def update_prediction(uki):
 
     N_theta, N_y, N_ens = uki.N_theta, uki.N_y, uki.N_ens
     ############# Prediction step:
+    
 
     theta_p_mean  = alpha_reg*theta_mean + (1-alpha_reg)*r
     theta_p_cov = alpha_reg**2*theta_cov + Sigma_omega
@@ -318,10 +324,8 @@ def update_analysis(uki, theta_p, g):
     tmp = np.linalg.solve(gg_cov.T, thetag_cov.T).T 
 
     
-    
     theta_mean =  theta_p_mean + np.matmul(tmp, (y - g_mean))
     theta_cov =  theta_p_cov - np.matmul(tmp, thetag_cov.T)
-    
     
     
 
@@ -336,7 +340,7 @@ def update_analysis(uki, theta_p, g):
 
 
 def UKI_Run(s_param, forward, 
-    theta0_mean, theta0_cov,
+    theta0_mean, theta0_init, theta0_cov,
     y, Sigma_eta,
     alpha_reg,
     gamma,
@@ -349,7 +353,7 @@ def UKI_Run(s_param, forward,
     
     
     ukiobj = UKI(theta_names ,
-    theta0_mean, 
+    theta0_mean, theta0_init,
     theta0_cov,
     y,
     Sigma_eta,

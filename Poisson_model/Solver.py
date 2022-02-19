@@ -10,8 +10,10 @@ from scipy.sparse.linalg import spsolve
 from scipy import sparse
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from Utility import gradient_first_c2f, gradient_first_f2c, interpolate_f2c
-from NeuralNet import *
+import sys
+sys.path.append('../Utility')
+from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c
+
 
 
     
@@ -24,7 +26,7 @@ def explicit_solve(model, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
     yy = np.linspace(0, L, Ny)
     
     t = 0.0
-    # qi are periodic (qi[0] == qi[-1])
+    # q has Dirichlet boundary condition 
     q = np.linspace(dbc[0], dbc[1], Ny)
     # q[0], q[-1] = dbc[0], dbc[1]
     # prepare data storage

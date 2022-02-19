@@ -1,12 +1,15 @@
-from Utility import gradient_first
+
 import numpy as np
 import scipy.io
 import scipy.ndimage
 import matplotlib.pyplot as plt
-from NeuralNet import *
 from datetime import datetime
+import torch
 
-
+import sys
+sys.path.append('../Utility')
+from Numerics import gradient_first
+import NeuralNet
 
 data_dir_384 = "../data/beta_1.0_Gamma_1.0_relax_0.01/"
 
@@ -65,11 +68,11 @@ layers = 2
 width = 20
 # activation='relu'
 activation='tanh'
-model  = FNN(ind, outd, layers, width, activation)
+model  = NeuralNet.FNN(ind, outd, layers, width, activation)
 loss_fn = torch.nn.MSELoss(reduction='sum')
 learning_rate = 1e-3
 optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-4)
-n_epochs = 200000
+n_epochs = 20000
 
 # model = torch.load("visc.model")
 

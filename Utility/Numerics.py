@@ -5,13 +5,18 @@ from scipy import sparse
 # periodic boundary condition without end point
 
 # # extrapolate the gradient at the boundary
-# def gradient_first(omega, dx):
-#     nx = len(omega)
-#     d_omega = np.copy(omega)
-#     d_omega[1:nx-1] = (omega[2:nx] - omega[0:nx-2]) / (2*dx)
-#     d_omega[0] = (omega[1] - omega[nx-1]) / (2*dx)
-#     d_omega[nx-1] = (omega[0] - omega[nx-2]) / (2*dx)
-#     return d_omega
+def gradient_first(omega, dx, bc = "one-sided"):
+    nx = len(omega)
+    d_omega = np.copy(omega)
+    d_omega[1:nx-1] = (omega[2:nx] - omega[0:nx-2]) / (2*dx)
+    
+    if bc == "periodic":
+        d_omega[0] = (omega[1] - omega[nx-1]) / (2*dx)
+        d_omega[nx-1] = (omega[0] - omega[nx-2]) / (2*dx)
+    else: #one-sided gradient 
+        d_omega[0] = (omega[1] - omega[0]) / (dx)
+        d_omega[nx-1] = (omega[nx-1] - omega[nx-2]) / (dx)
+    return d_omega
 
 # # extrapolate the gradient at the boundary
 # def gradient_second(omega, dx):

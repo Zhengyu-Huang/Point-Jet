@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from typing import List, Optional
 from torch.optim.optimizer import Optimizer
-
+import numpy as np
 
 ##################################################################################################################################
 #
@@ -125,9 +125,8 @@ class StructureNN(Module):
         if not isinstance(x, torch.Tensor):
             x = torch.tensor(x, dtype=self.Dtype, device=self.Device)
         return self(x).cpu().detach().numpy() if returnnp else self(x)
-   
 
-
+    
 class FNN(StructureNN):
     '''Fully connected neural networks.
     '''
@@ -139,7 +138,7 @@ class FNN(StructureNN):
         self.width = width
         self.activation = activation
         self.initializer = initializer
-        self.outputlayer = softmax
+        self.outputlayer = outputlayer
         
         self.modus = self.__init_modules()
         self.__initialize()
@@ -155,7 +154,7 @@ class FNN(StructureNN):
         if self.outputlayer == "square":
             x = x**2
         elif self.outputlayer == "relu":
-            x = torch.nn.relu(x)
+            x = F.relu(x)
 
         return x
     
@@ -181,24 +180,49 @@ class FNN(StructureNN):
         nn.init.constant_(self.modus['LinMout'].bias, 0)
     
     def update_params(self, theta):
+        
         theta_ind = 0
         for i in range(1, self.layers):
+            
             n_weights = (self.ind if i == 1 else self.width) * self.width
-            self.modus['LinM{}'.format(i)].weight = theta[theta_ind:theta_ind+n_weights]
+            self.modus['LinM{}'.format(i)].weight[:,:] = torch.nn.parameter.Parameter(torch.from_numpy(   theta[theta_ind:theta_ind+n_weights].reshape((self.width, -1)).astype(np.float32)  ))
             theta_ind += n_weights
             
             n_biases = self.width
-            self.modus['LinM{}'.format(i)].bias = theta[theta_ind: theta_ind+n_biases]
+            self.modus['LinM{}'.format(i)].bias[:] = torch.nn.parameter.Parameter(torch.from_numpy(theta[theta_ind: theta_ind+n_biases].astype(np.float32)))
             theta_ind += n_biases
         
         n_weights = self.width*self.outd
-        self.modus['LinMout'].weight = theta[theta_ind: theta_ind+n_weights]
+        self.modus['LinMout'].weight[:,:] = torch.nn.parameter.Parameter(torch.from_numpy(theta[theta_ind: theta_ind+n_weights].reshape((self.outd, self.width)).astype(np.float32)))
         theta_ind += n_weights
         
         n_biases = self.outd
-        self.modus['LinMout'].bias = theta[theta_ind: theta_ind+n_biases]
+        self.modus['LinMout'].bias[:] = torch.nn.parameter.Parameter(torch.from_numpy(theta[theta_ind: theta_ind+n_biases].astype(np.float32)))
         theta_ind += n_biases
         
+    def get_params(self):
+        theta = np.zeros(self.ind*self.width + (self.layers - 2)*self.width**2 + self.width*self.outd + (self.layers - 1)*self.width + self.outd)
+        
+        theta_ind = 0
+        for i in range(1, self.layers):
+            
+            n_weights = (self.ind if i == 1 else self.width) * self.width
+            theta[theta_ind:theta_ind+n_weights] =  self.modus['LinM{}'.format(i)].weight.detach().numpy().flatten() 
+            theta_ind += n_weights
+            
+            n_biases = self.width
+            theta[theta_ind: theta_ind+n_biases] = self.modus['LinM{}'.format(i)].bias.detach().numpy().flatten() 
+            theta_ind += n_biases
+        
+        n_weights = self.width*self.outd
+        theta[theta_ind: theta_ind+n_weights] = self.modus['LinMout'].weight.detach().numpy().flatten() 
+        theta_ind += n_weights
+        
+        n_biases = self.outd
+        theta[theta_ind: theta_ind+n_biases] = self.modus['LinMout'].bias.detach().numpy().flatten() 
+        theta_ind += n_biases
+        
+        return theta
         
         
 ##################################################################################################################################
