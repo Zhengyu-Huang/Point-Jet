@@ -1,1 +1,1 @@
-# Point-Jet
+# Diffusive closure 

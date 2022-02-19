@@ -7,6 +7,13 @@ from typing import List, Optional
 from torch.optim.optimizer import Optimizer
 
 
+##################################################################################################################################
+#
+#   Fully connected nerual network
+#
+##################################################################################################################################
+
+
 class Module(torch.nn.Module):
     '''Standard module format. 
     '''
@@ -124,7 +131,7 @@ class StructureNN(Module):
 class FNN(StructureNN):
     '''Fully connected neural networks.
     '''
-    def __init__(self, ind, outd, layers=2, width=50, activation='relu', initializer='default', softmax=False):
+    def __init__(self, ind, outd, layers=2, width=50, activation='relu', initializer='default', outputlayer='None'):
         super(FNN, self).__init__()
         self.ind = ind
         self.outd = outd
@@ -132,7 +139,7 @@ class FNN(StructureNN):
         self.width = width
         self.activation = activation
         self.initializer = initializer
-        self.softmax = softmax
+        self.outputlayer = softmax
         
         self.modus = self.__init_modules()
         self.__initialize()
@@ -143,8 +150,13 @@ class FNN(StructureNN):
             NonM = self.modus['NonM{}'.format(i)]
             x = NonM(LinM(x))
         x = self.modus['LinMout'](x)
-        if self.softmax:
-            x = nn.functional.softmax(x, dim=-1)
+        
+        
+        if self.outputlayer == "square":
+            x = x**2
+        elif self.outputlayer == "relu":
+            x = torch.nn.relu(x)
+
         return x
     
     def __init_modules(self):
@@ -167,10 +179,33 @@ class FNN(StructureNN):
             nn.init.constant_(self.modus['LinM{}'.format(i)].bias, 0)
         self.weight_init_(self.modus['LinMout'].weight)
         nn.init.constant_(self.modus['LinMout'].bias, 0)
+    
+    def update_params(self, theta):
+        theta_ind = 0
+        for i in range(1, self.layers):
+            n_weights = (self.ind if i == 1 else self.width) * self.width
+            self.modus['LinM{}'.format(i)].weight = theta[theta_ind:theta_ind+n_weights]
+            theta_ind += n_weights
+            
+            n_biases = self.width
+            self.modus['LinM{}'.format(i)].bias = theta[theta_ind: theta_ind+n_biases]
+            theta_ind += n_biases
+        
+        n_weights = self.width*self.outd
+        self.modus['LinMout'].weight = theta[theta_ind: theta_ind+n_weights]
+        theta_ind += n_weights
+        
+        n_biases = self.outd
+        self.modus['LinMout'].bias = theta[theta_ind: theta_ind+n_biases]
+        theta_ind += n_biases
         
         
         
-        
+##################################################################################################################################
+#
+#   Optimizer
+#
+##################################################################################################################################
         
 def adam(params: List[Tensor],
          grads: List[Tensor],
@@ -329,6 +364,11 @@ class Adam(Optimizer):
                  eps=group['eps'])
         return loss
     
+##################################################################################################################################
+#
+#   Normalizer
+#
+##################################################################################################################################
     
     
 class UnitGaussianNormalizer(object):
