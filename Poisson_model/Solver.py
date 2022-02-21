@@ -10,13 +10,48 @@ from scipy.sparse.linalg import spsolve
 from scipy import sparse
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import torch
 import sys
 sys.path.append('../Utility')
 from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c
+import NeuralNet
 
 
 
+####
+#
+####
+
+def create_net(ind, outd, layers, width, activation, initializer, outputlayer, params):
     
+    net = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer) 
+    net.update_params(params)
+    return net
+
+
+def net_eval(net, x):
+    return net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() 
+
+
+def nn_permeability(net, q, dq):
+    x = np.vstack((q, dq)).T        
+    permeability = net_eval(net, x)
+
+    return permeability
+
+
+def D_nn_permeability(net, q, dq):
+    Ny = q.size
+    Dq, Ddq = np.zeros(Ny), np.zeros(Ny)
+    
+    for i in range(Ny):
+        x = torch.from_numpy(np.array([[q[i],dq[i]]]).astype(np.float32))
+        x.requires_grad = True
+        y = net(x)  #.detach().numpy().flatten()
+        d = torch.autograd.grad(y, x)[0].numpy().flatten()
+        Dq[i], Ddq[i] = d[0], d[1]
+    
+    return Dq, Ddq
     
 # the model is a function: q,t ->  M(q)
 # the solution points are at cell faces

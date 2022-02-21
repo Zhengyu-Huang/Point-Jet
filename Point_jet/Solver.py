@@ -10,10 +10,59 @@ import scipy.io
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import torch
 # from Utility import gradient_first, gradient_second, gradient_first_c2f, gradient_first_f2c, interpolate_c2f
 import sys
 sys.path.append('../Utility')
 from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c
+
+
+#########
+#
+#########
+
+mu_scale = 1.0 #0.01
+def create_net(ind, outd, layers, width, activation, initializer, outputlayer, params):
+
+    net = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer) 
+    net.update_params(params)
+    return net
+
+def net_eval(x, net):
+    mu = net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() * mu_scale
+    # data (prediction) clean 
+    mu[mu <= 0.0] = 0.0
+    mu = scipy.ndimage.gaussian_filter1d(mu, 5)
+    return mu
+
+def nn_flux(net, q, dq):
+    x = np.vstack((q, dq)).T
+    
+    mu = net_eval(x, net) 
+    return mu*dq
+
+
+
+
+
+def load_data(data_dir):
+    
+    closure = -scipy.io.loadmat(data_dir+"data_closure_cons.mat")["data_closure_cons"]
+    dq_dy   =  scipy.io.loadmat(data_dir+"data_dq_dy.mat")["data_dq_dy"]
+    q       =  scipy.io.loadmat(data_dir+"data_q.mat")["data_q"]
+    
+    _, Ny, Nt = closure.shape
+
+    q_mean = np.mean(q[0, :, Nt//2:], axis=1)
+    dq_dy_mean = np.mean(dq_dy[0, :, Nt//2:], axis=1)
+    closure_mean = np.mean(closure[0, :, Nt//2:], axis=1)
+
+    return closure_mean, q_mean, dq_dy_mean
+
+
+
+
+
 
 
 # the model is a function: w,t ->  M(w)
