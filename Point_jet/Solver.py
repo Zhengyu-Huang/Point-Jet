@@ -15,7 +15,7 @@ import torch
 import sys
 sys.path.append('../Utility')
 from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c
-
+import NeuralNet
 
 #########
 #
