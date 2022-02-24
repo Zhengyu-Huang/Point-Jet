@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.linalg import block_diag
-
+import multiprocessing
+import pickle
+import os
 """
 UKI{FT<:AbstractFloat, IT<:Int}
 Struct that is used in Unscented Kalman Inversion (UKI)
@@ -9,9 +11,12 @@ For solving the inverse problem
     
 """
 class UKI:
-    def __init__(self, theta_names,theta0_mean, theta0_init, theta0_cov, y,
-                Sigma_eta,alpha_reg,  gamma, update_freq, 
-                modified_uscented_transform = True):
+    def __init__(self, theta_names,
+                 theta0_mean, theta0_mean_init, 
+                 theta0_cov, theta0_cov_init, 
+                 y,
+                 Sigma_eta,  alpha_reg,  gamma,  update_freq, 
+                 modified_uscented_transform = True):
 
         N_theta = theta0_mean.size
         N_y = y.size
@@ -44,9 +49,9 @@ class UKI:
         
 
         theta_mean = []  # array of Array{FT, 2}'s
-        theta_mean.append(theta0_init) # insert parameters at end of array (in this case just 1st entry)
+        theta_mean.append(theta0_mean_init) # insert parameters at end of array (in this case just 1st entry)
         theta_cov = [] # array of Array{FT, 2}'s
-        theta_cov.append(theta0_cov) # insert parameters at end of array (in this case just 1st entry)
+        theta_cov.append(theta0_cov_init) # insert parameters at end of array (in this case just 1st entry)
 
         y_pred = []  # array of Array{FT, 2}'s
     
@@ -258,15 +263,27 @@ def construct_cov(uki, x, x_mean, y, y_mean):
 #     uki.theta_cov.append(theta_cov) # N_ens x N_data
 
 
-def ensemble(s_param, theta_ens, forward):
+def ensemble(s_param, theta_ens, forward, parallel_flag = True):
     
     N_ens,  N_theta = theta_ens.shape
     N_y = s_param.N_y
     g_ens = np.zeros((N_ens,  N_y))
     
-    for i in range(N_ens):
-        theta = theta_ens[i, :]
-        g_ens[i, :] = forward(s_param, theta)
+    
+    if parallel_flag == True:
+        pool = multiprocessing.Pool(multiprocessing.cpu_count())
+        results = []
+        for i in range(N_ens):
+            results.append(pool.apply_async(forward, (s_param, theta_ens[i,:], )))
+        for (i, result) in enumerate(results):
+            g_ens[i, :] = result.get()
+        pool.close()
+    
+    
+    else:
+        for i in range(N_ens):
+            theta = theta_ens[i, :]
+            g_ens[i, :] = forward(s_param, theta)
 
     return g_ens
 
@@ -340,21 +357,27 @@ def update_analysis(uki, theta_p, g):
 
 
 def UKI_Run(s_param, forward, 
-    theta0_mean, theta0_init, theta0_cov,
+    theta0_mean, theta0_mean_init, 
+    theta0_cov,  theta0_cov_init,
     y, Sigma_eta,
     alpha_reg,
     gamma,
     update_freq,
     N_iter,
+    save_folder = "data",
     modified_uscented_transform = True,
     theta_basis = None):
+    
+    
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
     
     theta_names = s_param.theta_names
     
     
     ukiobj = UKI(theta_names ,
-    theta0_mean, theta0_init,
-    theta0_cov,
+    theta0_mean, theta0_mean_init,
+    theta0_cov, theta0_cov_init,
     y,
     Sigma_eta,
     alpha_reg,
@@ -396,17 +419,19 @@ def UKI_Run(s_param, forward,
                 decrease_step = 0
             
         opt_errors.append(opt_error)
-            
+        
+        pickle.dump(ukiobj, open(save_folder+"/ukiobj-" + str(i) + ".dat", "wb" ) )
             
         print("ukiobj.gamma : ", ukiobj.gamma)
-        print("len(ukiobj.opt_error) : ", i, len(opt_errors))
         print( "optimization error at iter ", i, " = ", opt_errors[i] )
-        print("len(ukiobj.theta_cov) : ", i, len(ukiobj.theta_cov))
+        
+        N_theta, N_y = len(theta0_mean), len(y)
+        print("data-misfit : ", 0.5*np.dot((y_pred[0:N_y-N_theta] - ukiobj.y[0:N_y-N_theta]) , np.linalg.solve(ukiobj.Sigma_eta[0:N_y-N_theta,0:N_y-N_theta], (y_pred[0:N_y-N_theta] - ukiobj.y[0:N_y-N_theta]))),  
+              "reg : ", 0.5*np.dot((y_pred[-N_theta:] - ukiobj.y[-N_theta:]) , np.linalg.solve(ukiobj.Sigma_eta[-N_theta:,-N_theta:], (y_pred[-N_theta:] - ukiobj.y[-N_theta:]))))
         print( "Frobenius norm of the covariance at iter ", i, " = ", np.linalg.norm(ukiobj.theta_cov[i]) ) 
-        
-        
-
         i += 1
+        
+        
     return ukiobj
     
 

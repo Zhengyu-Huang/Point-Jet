@@ -29,14 +29,16 @@ def create_net(ind, outd, layers, width, activation, initializer, outputlayer, p
     return net
 
 
-def net_eval(net, x):
-    return net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() 
+def net_eval(net, x, non_negative=False):
+    permeability =  net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() 
+    if non_negative:
+        permeability[permeability <= 0] = 0.0
+    return permeability
 
-
-def nn_permeability(net, q, dq):
+def nn_permeability(net, q, dq, non_negative=False):
     x = np.vstack((q, dq)).T        
-    permeability = net_eval(net, x)
-
+    permeability = net_eval(net, x, non_negative)
+    
     return permeability
 
 
@@ -222,7 +224,7 @@ def nummodel(permeability, q, yy, res):
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
-    mu_c = permeability(q_c, dq_c)
+    mu_c = permeability(q=q_c, dq=dq_c)
     res[:] = gradient_first_c2f(mu_c*(dq_c), dy)
 
 # dM/dx    

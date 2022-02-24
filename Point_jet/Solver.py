@@ -21,7 +21,7 @@ import NeuralNet
 #
 #########
 
-mu_scale = 1.0 #0.01
+mu_scale = 0.01
 def create_net(ind, outd, layers, width, activation, initializer, outputlayer, params):
 
     net = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer) 
@@ -31,12 +31,12 @@ def create_net(ind, outd, layers, width, activation, initializer, outputlayer, p
 def net_eval(x, net):
     mu = net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() * mu_scale
     # data (prediction) clean 
-    mu[mu <= 0.0] = 0.0
+    # mu[mu <= 0.0] = 0.0
     mu = scipy.ndimage.gaussian_filter1d(mu, 5)
     return mu
 
 def nn_flux(net, q, dq):
-    x = np.vstack((q, dq)).T
+    x = np.vstack((np.fabs(q), dq)).T
     
     mu = net_eval(x, net) 
     return mu*dq
