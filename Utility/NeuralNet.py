@@ -148,14 +148,14 @@ class FNN(StructureNN):
             LinM = self.modus['LinM{}'.format(i)]
             NonM = self.modus['NonM{}'.format(i)]
             x = NonM(LinM(x))
+            
         x = self.modus['LinMout'](x)
-        
         
         if self.outputlayer == "square":
             x = x**2
         elif self.outputlayer == "relu":
             x = F.relu(x)
-
+        
         return x
     
     def __init_modules(self):

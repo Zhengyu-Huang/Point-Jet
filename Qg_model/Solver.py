@@ -11,16 +11,16 @@ sys.path.append('../Utility')
 from Numerics import gradient_first,  gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c, psi_fft_sol, gradient_fft
 import NeuralNet
 
-def load_netcdf(pre_file, file_name, start, end, step):
+def load_netcdf(folder_name, file_name, start, end, step):
     
-    f = pre_file + file_name + '.' + str(start) + '.nc'
+    f = folder_name + file_name + '.' + str(start) + '.nc'
     ds = xr.open_dataset(f, engine='h5netcdf')
     _, nlayer, nx, ny = ds.data_vars['q'].values.shape
     
     nt = (end - start)//step + 1
     u, v, q, psi = np.zeros((nt, nx, ny, nlayer)), np.zeros((nt, nx, ny, nlayer)), np.zeros((nt, nx, ny, nlayer)), np.zeros((nt, nx, ny, nlayer))
     for i in range(nt):
-        f = pre_file + file_name + '.' + str(start + i*step) + '.nc'
+        f = folder_name + file_name + '.' + str(start + i*step) + '.nc'
         ds = xr.open_dataset(f, engine='h5netcdf')
         psi_h_i = ds.data_vars['ph']
         psi_i = np.fft.irfftn(psi_h_i, axes=(-2,-1))
@@ -40,15 +40,11 @@ def load_netcdf(pre_file, file_name, start, end, step):
 
 
 
-def preprocess_data(file_name, beta, lam, dU, L, start=3000000, end=6000000, step=20000):
+def preprocess_data(folder_name, file_name, beta, dU, L, start=3000000, end=6000000, step=20000):
     
-    F1 = 2.0/lam**2
-    F2 = 2.0/lam**2
-    beta1, beta2 = beta + F1*dU, beta - F2*dU
+    beta1 = beta2 = beta
 
-
-    pre_file  = '/central/groups/esm/zhaoyi/pyqg_run/2layer/' + file_name + '/'
-    u, v, q, psi = load_netcdf(pre_file, file_name, start, end, step)
+    u, v, q, psi = load_netcdf(folder_name, file_name, start, end, step)
     
     nt, nx, ny, nlayers = u.shape
 
@@ -58,9 +54,9 @@ def preprocess_data(file_name, beta, lam, dU, L, start=3000000, end=6000000, ste
     u_zonal_mean   = np.mean(u, axis = 1)
     vor_zonal_mean = np.copy(u_zonal_mean)
     
-    yy, dy = np.linspace(0, L - L/ny, ny), L/ny
+    yy, dy = np.linspace(L/(2*ny), L - L/(2*ny), ny), L/ny
 
-    flux_zonal_mean = np.mean(v * q, axis = 1)
+    flux_zonal_mean = -np.mean(v * q, axis = 1)
     for i in range(nt):
         for j in range(nlayers):
             dq_zonal_mean[i, :, j] = gradient_first(q_zonal_mean[i, :, j], dy, bc="periodic")
@@ -84,14 +80,17 @@ def preprocess_data(file_name, beta, lam, dU, L, start=3000000, end=6000000, ste
     
     t_mean_steps = range(0,nt)
     flux_mean    = np.mean(flux_zonal_mean[t_mean_steps, :, :], axis = 0)
-    flux_mean[:, 0] = np.mean(flux_mean[:, 0])
+    # flux_mean[:, 0] = np.mean(flux_mean[:, 0])
     dpv_mean     = np.mean(dpv_zonal_mean[t_mean_steps, :, :],  axis = 0)
+    
+    
+    
     q_mean       = np.mean(q_zonal_mean[t_mean_steps, :, :],    axis = 0)
     u_mean         = np.mean(u_zonal_mean[t_mean_steps, :, :],    axis = 0)
     vor_mean         = np.mean(vor_zonal_mean[t_mean_steps, :, :],    axis = 0)
     psi_mean = np.mean(psi_zonal_mean[t_mean_steps, :, :],    axis = 0)
     psi_var_2_mean = np.mean(psi_var_2_zonal_mean[t_mean_steps, :, :],    axis = 0)
-    mu_mean = -flux_mean / dpv_mean
+    mu_mean = flux_mean / dpv_mean
 
     
     return [mu_mean.T, dpv_mean.T, u_mean.T, vor_mean.T, q_mean.T, psi_mean.T, flux_mean.T, psi_var_2_mean.T], [q_zonal_mean, dq_zonal_mean]

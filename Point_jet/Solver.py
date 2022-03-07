@@ -28,17 +28,20 @@ def create_net(ind, outd, layers, width, activation, initializer, outputlayer, p
     net.update_params(params)
     return net
 
-def net_eval(x, net):
+def net_eval(x, net, non_negative=False):
     mu = net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() * mu_scale
     # data (prediction) clean 
-    # mu[mu <= 0.0] = 0.0
+    
+    if non_negative:
+        mu[mu <= 0.0] = 0.0
+
     mu = scipy.ndimage.gaussian_filter1d(mu, 5)
     return mu
 
-def nn_flux(net, q, dq):
+def nn_flux(net, q, dq, non_negative=False):
     x = np.vstack((np.fabs(q), dq)).T
     
-    mu = net_eval(x, net) 
+    mu = net_eval(x, net, non_negative) 
     return mu*dq
 
 
@@ -92,7 +95,7 @@ def explicit_solve(model, q_jet, tau, dt = 1.0, Nt = 1000, save_every = 1, L = 4
         if i%save_every == 0:
             q_data[i//save_every, :] = q
             t_data[i//save_every] = i*dt
-            print(i, "max q", np.max(q))
+#             print(i, "max q", np.max(q))
 
     return  yy, t_data, q_data
 
@@ -131,7 +134,7 @@ def nummodel(permeability, q, yy, res):
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
-    mu_c = permeability(q_c, dq_c)
+    mu_c = permeability(q=q_c, dq=dq_c)
     
     
     # mu_c[mu_t >=0] = 0.0
@@ -148,21 +151,11 @@ def nummodel_flux(flux, q, yy, res):
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
-    M_c = flux(q_c, dq_c)
+    M_c = flux(q=q_c, dq=dq_c)
     res[:] = gradient_first_c2f(M_c, dy)
 
 
 
-# def nnmodel(torchmodel, q, tau, dy):
-#     # return np.zeros(len(q))
-#     # a0, a1, b0, b1 = 0.2, 0.3, 0.4, 0.5
-    
-#     d_q = gradient_second(q, dy)
-
-#     return torchmodel(torch.reshape(torch.tensor(d_q, dtype=torch.float32), (len(q),1))).detach().numpy().flatten() / tau
-
-#     # return  ( a1*np.tanh(a0*q + b0) + b1 ) / tau
-#     # return  ( a1*torch.relu( torch.tensor(a0*q + b0)) + b1 ) / tau
 
 
 # tau = 10.0
