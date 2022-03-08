@@ -18,42 +18,27 @@ import NeuralNet
 
 
 
-####
-#
-####
-
-def create_net(ind, outd, layers, width, activation, initializer, outputlayer, params):
-    
-    net = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer) 
-    net.update_params(params)
-    return net
-
-
-def net_eval(net, x, non_negative=False):
-    permeability =  net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() 
-    if non_negative:
-        permeability[permeability <= 0] = 0.0
-    return permeability
-
-def nn_permeability(net, q, dq, non_negative=False):
-    x = np.vstack((q, dq)).T        
-    permeability = net_eval(net, x, non_negative)
-    
-    return permeability
+#########################################
+# Neural network information
+#########################################
+ind, outd, width = 2, 1, 10
+layers = 2
+activation, initializer, outputlayer = "sigmoid", "default", "sigmoid" #"None"
+mu_scale = 2.0
+non_negative = True
+filter_on=True
+filter_sigma = 5.0
 
 
-def D_nn_permeability(net, q, dq):
-    Ny = q.size
-    Dq, Ddq = np.zeros(Ny), np.zeros(Ny)
-    
-    for i in range(Ny):
-        x = torch.from_numpy(np.array([[q[i],dq[i]]]).astype(np.float32))
-        x.requires_grad = True
-        y = net(x)  #.detach().numpy().flatten()
-        d = torch.autograd.grad(y, x)[0].numpy().flatten()
-        Dq[i], Ddq[i] = d[0], d[1]
-    
-    return Dq, Ddq
+
+def permeability_ref(x):
+    q, dq = x[:, 0], x[:, 1]
+    return np.sqrt(q**2 + dq**2) 
+def D_permeability_ref(x):
+    q, dq = x[:, 0], x[:, 1]
+    return q/np.sqrt(q**2 + dq**2), dq/np.sqrt(q**2 + dq**2)
+
+
     
 # the model is a function: q,t ->  M(q)
 # the solution points are at cell faces
@@ -224,7 +209,8 @@ def nummodel(permeability, q, yy, res):
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
-    mu_c = permeability(q=q_c, dq=dq_c)
+    x = np.vstack((q_c, dq_c)).T
+    mu_c = permeability(x = x)
     res[:] = gradient_first_c2f(mu_c*(dq_c), dy)
 
 # dM/dx    
@@ -234,7 +220,8 @@ def nummodel_flux(flux, q, yy, res):
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
-    M_c = flux(q_c, dq_c)
+    x = np.vstack((q_c, dq_c)).T
+    M_c = flux(x = x)
     res[:] = gradient_first_c2f(M_c, dy)
 
     

@@ -21,28 +21,28 @@ import NeuralNet
 #
 #########
 
-mu_scale = 0.01
-def create_net(ind, outd, layers, width, activation, initializer, outputlayer, params):
+# mu_scale = 0.01
+# def create_net(ind, outd, layers, width, activation, initializer, outputlayer, params):
 
-    net = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer) 
-    net.update_params(params)
-    return net
+#     net = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer) 
+#     net.update_params(params)
+#     return net
 
-def net_eval(x, net, non_negative=False):
-    mu = net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() * mu_scale
-    # data (prediction) clean 
+# def net_eval(x, net, non_negative=False):
+#     mu = net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() * mu_scale
+#     # data (prediction) clean 
     
-    if non_negative:
-        mu[mu <= 0.0] = 0.0
+#     if non_negative:
+#         mu[mu <= 0.0] = 0.0
 
-    mu = scipy.ndimage.gaussian_filter1d(mu, 5)
-    return mu
+#     mu = scipy.ndimage.gaussian_filter1d(mu, 5)
+#     return mu
 
-def nn_flux(net, q, dq, non_negative=False):
-    x = np.vstack((np.fabs(q), dq)).T
+# def nn_flux(net, q, dq, non_negative=False):
+#     x = np.vstack((np.fabs(q), dq)).T
     
-    mu = net_eval(x, net, non_negative) 
-    return mu*dq
+#     mu = net_eval(x, net, non_negative) 
+#     return mu*dq
 
 
 
@@ -134,7 +134,8 @@ def nummodel(permeability, q, yy, res):
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
-    mu_c = permeability(q=q_c, dq=dq_c)
+    x = np.vstack((q_c, dq_c)).T
+    mu_c = permeability(x=x)
     
     
     # mu_c[mu_t >=0] = 0.0
@@ -151,7 +152,8 @@ def nummodel_flux(flux, q, yy, res):
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
     q_c = interpolate_f2c(q)
-    M_c = flux(q=q_c, dq=dq_c)
+    x = np.vstack((q_c, dq_c)).T
+    M_c = flux(x = x)
     res[:] = gradient_first_c2f(M_c, dy)
 
 

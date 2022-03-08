@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import scipy
 from torch import Tensor
 from typing import List, Optional
 from torch.optim.optimizer import Optimizer
@@ -466,3 +467,65 @@ class UnitGaussianNormalizer(object):
     def cpu(self):
         self.mean = self.mean.cpu()
         self.std = self.std.cpu()
+        
+        
+        
+    
+
+    
+##########################################################################
+# Kernel-Smoothed neural network
+##########################################################################
+
+
+def create_net(ind, outd, layers, width, activation, initializer, outputlayer, params):
+
+    net = FNN(ind, outd, layers, width, activation, initializer, outputlayer) 
+    net.update_params(params)
+    return net
+
+# The eddy viscosity is 
+# mu_scale*Int[g(x - y; sigma) NN(y)]dy
+def net_eval(net, x, mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):
+    mu = net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() 
+    # data (prediction) clean 
+    
+    if non_negative:
+        mu[mu <= 0.0] = 0.0
+    
+    if filter_on:
+        # the axis is 1
+        n_f = len(x)//n_data
+        for i in range(n_data):
+            mu[i*n_f:(i+1)*n_f] = scipy.ndimage.gaussian_filter1d(mu[i*n_f:(i+1)*n_f], filter_sigma, mode="nearest") 
+            
+    return mu * mu_scale
+
+
+# x is nx by n_feature matrix, which is the input for the neural network
+def nn_viscosity(net, x, mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):  
+    mu = net_eval(x=x, net=net, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
+    return mu
+
+def nn_flux(net, x,  mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):
+    mu = nn_viscosity(net=net, x=x, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
+    return mu*dq
+
+
+
+
+# def D_nn_permeability(net, q, dq, mu_const = 0.0, mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):
+#     Ny = q.size
+#     Dq, Ddq = np.zeros(Ny), np.zeros(Ny)
+    
+#     for i in range(Ny):
+#         x = torch.from_numpy(np.array([[q[i],dq[i]]]).astype(np.float32))
+#         x.requires_grad = True
+#         y = net(x)  #.detach().numpy().flatten()
+#         d = torch.autograd.grad(y, x)[0].numpy().flatten()
+#         Dq[i], Ddq[i] = d[0], d[1]
+    
+#     return Dq, Ddq
+
+
+

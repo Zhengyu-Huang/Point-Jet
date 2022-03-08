@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 from scipy.linalg import block_diag
 import multiprocessing
 import pickle
