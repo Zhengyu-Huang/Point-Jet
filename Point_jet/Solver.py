@@ -18,34 +18,15 @@ from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c
 import NeuralNet
 
 #########
-#
+# Neural network information
 #########
-
-# mu_scale = 0.01
-# def create_net(ind, outd, layers, width, activation, initializer, outputlayer, params):
-
-#     net = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer) 
-#     net.update_params(params)
-#     return net
-
-# def net_eval(x, net, non_negative=False):
-#     mu = net(torch.tensor(x, dtype=torch.float32)).detach().numpy().flatten() * mu_scale
-#     # data (prediction) clean 
-    
-#     if non_negative:
-#         mu[mu <= 0.0] = 0.0
-
-#     mu = scipy.ndimage.gaussian_filter1d(mu, 5)
-#     return mu
-
-# def nn_flux(net, q, dq, non_negative=False):
-#     x = np.vstack((np.fabs(q), dq)).T
-    
-#     mu = net_eval(x, net, non_negative) 
-#     return mu*dq
-
-
-
+ind, outd, width = 2, 1, 10
+layers = 2
+activation, initializer, outputlayer = "sigmoid", "default", "sigmoid"
+mu_scale = 0.1
+non_negative = True
+filter_on=True
+filter_sigma = 5.0
 
 
 def load_data(data_dir):

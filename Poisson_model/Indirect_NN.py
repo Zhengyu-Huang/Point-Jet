@@ -111,8 +111,8 @@ def loss_aug(s_param, params):
     N_data, Nx = f.shape
     q_sol = np.zeros((N_data, Nx))
     
-    net =  create_net(ind, outd, layers, width, activation, initializer, outputlayer,  params)
-    nn_model = partial(nn_permeability, net=net, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma)
+    net =  NeuralNet.create_net(ind, outd, layers, width, activation, initializer, outputlayer,  params)
+    nn_model = partial(NeuralNet.nn_viscosity, net=net, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma)
     model = lambda q, xx, res : nummodel(nn_model, q, xx, res)
     
     for i in range(N_data):
@@ -179,9 +179,9 @@ theta0_mean_init = NeuralNet.FNN(ind, outd, layers, width, activation, initializ
 theta0_mean = np.zeros(N_theta)
 
 theta0_cov = np.zeros((N_theta, N_theta))
-np.fill_diagonal(theta0_cov, 10.0**2)  
+np.fill_diagonal(theta0_cov, 100.0**2)  
 theta0_cov_init = np.zeros((N_theta, N_theta))
-np.fill_diagonal(theta0_cov_init, 1.0**2)  
+np.fill_diagonal(theta0_cov_init, 0.1**2)  
 
 y_aug = np.hstack((y, theta0_mean))
 Sigma_eta_aug = block_diag(Sigma_eta, theta0_cov)

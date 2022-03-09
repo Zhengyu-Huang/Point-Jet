@@ -11,6 +11,28 @@ sys.path.append('../Utility')
 from Numerics import gradient_first,  gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c, psi_fft_sol, gradient_fft
 import NeuralNet
 
+
+
+
+
+
+
+#########################################
+# Neural network information
+#########################################
+ind, outd, width = 2, 1, 10
+layers = 2
+activation, initializer, outputlayer = "sigmoid", "default", "sigmoid" #"None"
+mu_scale = 2.0
+non_negative = True
+filter_on=True
+filter_sigma = 5.0
+# input scale
+q_scale = 100
+dpv_scale = 10
+
+
+
 def load_netcdf(folder_name, file_name, start, end, step):
     
     f = folder_name + file_name + '.' + str(start) + '.nc'
@@ -97,6 +119,79 @@ def preprocess_data(folder_name, file_name, beta, dU, L, start=3000000, end=6000
 
 
 
+
+
+
+class QG_params:
+    def __init__(self, L, dU, F1, F2, hyper_order, hyper_nu, 
+                 beta, mu):
+        self.L = L
+        self.dU = dU
+        self.F1 = F1
+        self.F2 = F2
+        self.hyper_order= hyper_order
+        self.hyper_nu = hyper_nu
+        
+        self.beta = beta
+        self.mu = mu
+    
+
+def load_data(betas = [1, 2, 3]):
+
+    Ny = 256
+    L = 50*2*np.pi
+    H = [1.0, 1.0]               # the rest depths of each layer
+    kd = 1.0                     # rd
+    mu = 0.3                     # bottom drag rek
+    U = [0.0, 0.0]
+    dU = U[0] - U[1] 
+    F1 = kd/(1 + (H[0]/H[1])**2.0)
+    F2 = kd/(1 + (H[1]/H[0])**2.0)
+    hyper_nu, hyper_order = 0.0, 2
+    Q = 1.0
+
+    yy, dy = np.linspace(L/(2*Ny), L - L/(2*Ny), Ny), L/Ny
+
+    force = np.zeros((2, Ny))
+    force[0, :] = -Q * np.sin(2*np.pi*yy/L)
+    force[1, :] =  Q * np.sin(2*np.pi*yy/L)
+    
+    
+    folder_names = ["/central/groups/esm/dzhuang/pyqg_run/2layer/nx256beta" + str(betas[i]) + "rek0p3/" for i in range(len(betas))]
+    file_names = ["nx256beta" + str(betas[i]) + "rek0p3" for i in range(len(betas))] 
+
+    start, end, step = 500000, 1000000, 20000
+
+    N_data = len(folder_names)
+    mu_mean,  closure_mean,  dpv_mean, q_mean, psi_mean = np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny))
+
+
+    for i in range(N_data):  
+
+        flow_means, flow_zonal_means = preprocess_data(folder_names[i], file_names[i], betas[i], dU, L, start, end, step)
+        mu_mean[i, :, :], dpv_mean[i, :, :], u_mean, vor_mean, q_mean[i, :, :], psi_mean[i, :, :], closure_mean[i, :, :], psi_var_2_mean = flow_means[:8]
+    
+    
+    mu_mean_clip = np.copy(mu_mean)
+    # TODO: clean data
+    mu_mean[mu_mean <= 0.0 ] = 0.0
+    for i in range(N_data):
+        for layer in range(2):
+            mu_mean[i, layer, :] = scipy.ndimage.gaussian_filter1d(mu_mean[i, layer, :], 5)
+
+    
+    physics_params = [QG_params(L=L, dU=dU, F1=F1, F2=F2, hyper_nu=hyper_nu, hyper_order=hyper_order, beta=beta, mu=mu)
+     for beta in betas]
+    
+    return physics_params, q_mean, psi_mean, dpv_mean,  mu_mean, mu_mean_clip,  closure_mean, yy, force
+
+
+
+
+
+
+
+################################################################################################################################
 def hyperdiffusion(q, nu, hyper_n, dy):
     q1 = q[0, :]
     q2 = q[1, :]
@@ -113,7 +208,12 @@ def nummodel(permeability, beta1, beta2, q, psi, yy, res):
     q1, q2 = q[0, :], q[1, :]
     dq1, dq2 = gradient_first_f2c(q1, dy, bc="periodic"), gradient_first_f2c(q2, dy, bc="periodic")
     
-    mu_c1, mu_c2 = permeability(q1, dq1, q2, dq2)
+    q = np.hstack((q1,q2)) / q_scale
+    dq = np.hstack((dq1,dq2)) / dpv_scale
+    x = np.vstack((q , dq)).T
+    mu = permeability(x = x)
+    mu_c1 = mu[0: len(yy)]
+    mu_c2 = mu[len(yy):]
     
     res[0, :] = gradient_first_c2f(mu_c1 * (dq1 + beta1), dy, bc="periodic")
     res[1, :] = gradient_first_c2f(mu_c2 * (dq2 + beta2), dy, bc="periodic")
@@ -125,60 +225,27 @@ def nummodel_fft(permeability, beta1, beta2, q, psi, yy, res):
     q1, q2 = q[0, :], q[1, :]
     dq1, dq2 = gradient_fft(q1, dy, 1), gradient_fft(q2, dy, 1)
     
-    mu_c1, mu_c2 = permeability(q1, dq1, q2, dq2)
+    q = np.hstack((q1,q2)) / q_scale
+    dq = np.hstack((dq1,dq2)) /dpv_scale
+    x = np.vstack((q , dq)).T
+    mu = permeability(x = x)
+    mu_c1 = mu[0: len(yy)]
+    mu_c2 = mu[len(yy):]
     
     res[0, :] = gradient_fft(mu_c1 * (dq1 + beta1), dy, 1)
     res[1, :] = gradient_fft(mu_c2 * (dq2 + beta2), dy, 1)
     
     
 
-
-
-# def nnmodel(q, psi, yy, params, model_top, top_x_normalizer, top_y_normalizer, model_bot, bot_x_normalizer, bot_y_normalizer):
-#     beta, dU, F1, F2 = params["beta"], params["dU"], params["F1"], params["F2"]
-#     beta1, beta2 = beta + F1*dU, beta - F2*dU
-#     dy = yy[1] - yy[0]
-#     ny = len(yy)
     
-    
-#     q1, q2 = q[0, :], q[1, :]
-#     dq1, dq2 = gradient_first_f2c(q1, dy, bc="periodic"), gradient_first_f2c(q2, dy, bc="periodic")
-    
-#     dpv = np.copy(q)
-    
-
-#     top_x = np.zeros((ny*1, 1))
-#     bot_x = np.zeros((ny*1, 1))
-    
-#     top_x[:, 0] = dq1 + beta1
-#     bot_x[:, 0] = dq2 + beta2
-    
-    
-#     top_x = torch.from_numpy(top_x.astype(np.float32))
-#     bot_x = torch.from_numpy(bot_x.astype(np.float32))
-    
-    
-#     mu_c = np.copy(q)
-#     mu_c[0, :] = top_y_normalizer.decode(model_top(top_x_normalizer.encode(top_x))).detach().numpy().flatten()
-#     mu_c[1, :] = bot_y_normalizer.decode(model_bot(bot_x_normalizer.encode(bot_x))).detach().numpy().flatten()
-    
-#     mu_c[mu_c < 0] = 0.0
-    
-#     mu_c[0,:] = scipy.ndimage.gaussian_filter1d(mu_c[0,:], 5)
-#     mu_c[1,:] = scipy.ndimage.gaussian_filter1d(mu_c[1,:], 5)
-    
-#     J1 = gradient_first_c2f(mu_c[0,:] * (dq1 + beta1), dy, bc="periodic")
-#     J2 = gradient_first_c2f(mu_c[1,:] * (dq2 + beta2), dy, bc="periodic")
-
-#     return np.vstack((J1, J2))
 
 
 def explicit_solve(model, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
-    L, dU, beta, mu, F1, F2 = params["L"], params["dU"], params["beta"], params["mu"], params["F1"], params["F2"]
-    nu, hyper_n = params["nu"], params["hyperdiffusion_order"]
+    L, dU, F1, F2, beta, mu = params.L, params.dU, params.F1, params.F2, params.beta, params.mu
+    hyper_nu, hyper_order = params.hyper_nu, params.hyper_order
     
     _, Ny = q0.shape
-    yy, dy = np.linspace(0, L - L/Ny, Ny), L/Ny
+    yy, dy = np.linspace(L/(2*Ny), L - L/(2*Ny), Ny), L/Ny
     
     t = 0.0
     
@@ -197,7 +264,7 @@ def explicit_solve(model, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
         dd_psi2 = gradient_fft(psi[1, :], dy, 2)
         
         model(q, psi, yy, res)
-        tend[:,:] = f + res + hyperdiffusion(q, nu, hyper_n, dy)
+        tend[:,:] = f + res + hyperdiffusion(q, hyper_nu, hyper_order, dy)
         tend[1,:] -= mu*dd_psi2
         
         q += dt * tend
