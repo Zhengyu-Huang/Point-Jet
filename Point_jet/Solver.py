@@ -22,7 +22,7 @@ import NeuralNet
 #########
 ind, outd, width = 2, 1, 10
 layers = 2
-activation, initializer, outputlayer = "sigmoid", "default", "sigmoid"
+activation, initializer, outputlayer = "sigmoid", "default", "None"
 mu_scale = 0.1
 non_negative = True
 filter_on=True

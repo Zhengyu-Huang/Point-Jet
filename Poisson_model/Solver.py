@@ -23,7 +23,7 @@ import NeuralNet
 #########################################
 ind, outd, width = 2, 1, 10
 layers = 2
-activation, initializer, outputlayer = "sigmoid", "default", "sigmoid" #"None"
+activation, initializer, outputlayer = "sigmoid", "default", "None"
 mu_scale = 2.0
 non_negative = True
 filter_on=True
@@ -266,22 +266,43 @@ def nummodel_jac(permeability, q, yy, res, V, exact = False, D_permeability = No
     return res, V
 
 
-# def nnmodel_jac(torchmodel, omega, tau, dy):
-#     # return np.zeros(len(omega))
-#     # a0, a1, b0, b1 = 0.2, 0.3, 0.4, 0.5
 
-#     d_omega = gradient_first_c2f(omega, dy)
 
-#     omega_f = interpolate_c2f(omega)
-#     input  = torch.from_numpy(np.stack((abs(omega_f), d_omega)).T.astype(np.float32))
-#     mu_f = -torchmodel(input).detach().numpy().flatten()
-#     mu_f[mu_f >= 0.0] = 0.0
 
-#     mu_f = scipy.ndimage.gaussian_filter1d(mu_f, 5)
+def generate_data_helper(permeability, f_func, L=1.0, Nx = 100):
+    xx = np.linspace(0.0, L, Nx)
+    dy = xx[1] - xx[0]
+    f = f_func(xx)   
+    dbc = np.array([0.0, 0.0]) 
+       
+    model = lambda q, yy, res : nummodel(permeability, q, yy, res)
+    xx, t_data, q_data = explicit_solve(model, f, dbc, dt = 5.0e-6, Nt = 500000, save_every = 100000, L = L)
+
     
-#     M = gradient_first_f2c(mu_f*(d_omega), dy)
+    print("Last step increment is : ", np.linalg.norm(q_data[-1, :] - q_data[-2, :]), " last step is : ", np.linalg.norm(q_data[-1, :]))
+    
+    q = q_data[-1, :]
+    q_c, dq_c = interpolate_f2c(q), gradient_first_f2c(q, dy)
+    return xx, f, q, q_c, dq_c 
 
-#     return M
+def generate_data():
+    f_funcs = []
+    n_data = 10
+
+    for i in range(1,n_data):
+        def func(xx, A = i):
+            return A * xx
+        f_funcs.append(func)
 
 
+    L = 1.0
+    Nx = 100
+    n_data = len(f_funcs)
+    xx, f, q, q_c, dq_c = np.zeros((n_data, Nx)), np.zeros((n_data, Nx)), np.zeros((n_data, Nx)), np.zeros((n_data, Nx-1)), np.zeros((n_data, Nx-1))
 
+
+    for i in range(n_data):
+        xx[i, :], f[i, :], q[i, :], q_c[i, :], dq_c[i, :] = generate_data_helper(permeability_ref, f_funcs[i], L=L, Nx=Nx)
+
+        
+    return xx, f, q, q_c, dq_c

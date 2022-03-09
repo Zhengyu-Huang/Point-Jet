@@ -156,6 +156,8 @@ class FNN(StructureNN):
             x = x**2
         elif self.outputlayer == "relu":
             x = F.relu(x)
+        elif self.outputlayer == "sigmoid":
+            x = F.sigmoid(x)
         
         return x
     
