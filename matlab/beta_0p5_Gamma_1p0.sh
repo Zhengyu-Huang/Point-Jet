@@ -3,13 +3,13 @@
 #SBATCH --time=05:00:00                 # walltime
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=3
 #SBATCH -J "beta_0p5"
 #SBATCH --output=output/slurm_%A_%a.out
 #SBATCH --error=output/slurm_%A_%a.err  
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
-#SBATCH --array=0-8
+#SBATCH --array=0-2
 
 ################################
 # Point jet DNS data generation #
@@ -19,9 +19,10 @@
 set -euo pipefail
 
 # simulation parameters
-beta=0.5
+beta=1.0
 Gamma=1.0
-relax_values=(0.32 0.16 0.08 0.04 0.02 0.01 0.005 0.002 0.001)  
+# relax_values=(0.32 0.16 0.08 0.04 0.02 0.01 0.005 0.002 0.001)  
+relax_values=(0.2 0.06 0.005)
 relax=${relax_values[${SLURM_ARRAY_TASK_ID}]}
 
 # output parameters
