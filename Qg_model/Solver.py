@@ -22,7 +22,7 @@ import NeuralNet
 #########################################
 ind, outd, width = 2, 1, 10
 layers = 2
-activation, initializer, outputlayer = "sigmoid", "default", "sigmoid" #"None"
+activation, initializer, outputlayer = "sigmoid", "default", "None"
 mu_scale = 2.0
 non_negative = True
 filter_on=True
@@ -31,7 +31,12 @@ filter_sigma = 5.0
 q_scale = 100
 dpv_scale = 10
 
-
+def str_to_num(x):
+    if x.find("p") == -1:
+        return np.float64(x)
+    
+    int_part, frac_part = x.split("p")
+    return np.float64(int_part) + np.float64(frac_part)/10.0**(len(frac_part))
 
 def load_netcdf(folder_name, file_name, start, end, step):
     
@@ -124,7 +129,7 @@ def preprocess_data(folder_name, file_name, beta, dU, L, start=3000000, end=6000
 
 class QG_params:
     def __init__(self, L, dU, F1, F2, hyper_order, hyper_nu, 
-                 beta, mu):
+                 beta, rek):
         self.L = L
         self.dU = dU
         self.F1 = F1
@@ -133,16 +138,16 @@ class QG_params:
         self.hyper_nu = hyper_nu
         
         self.beta = beta
-        self.mu = mu
+        self.rek = rek
     
 
-def load_data(betas = [1, 2, 3]):
+def load_data(beta_rek_strs, beta_reks):
 
     Ny = 256
     L = 50*2*np.pi
     H = [1.0, 1.0]               # the rest depths of each layer
     kd = 1.0                     # rd
-    mu = 0.3                     # bottom drag rek
+
     U = [0.0, 0.0]
     dU = U[0] - U[1] 
     F1 = kd/(1 + (H[0]/H[1])**2.0)
@@ -156,9 +161,15 @@ def load_data(betas = [1, 2, 3]):
     force[0, :] = -Q * np.sin(2*np.pi*yy/L)
     force[1, :] =  Q * np.sin(2*np.pi*yy/L)
     
+    N_runs = len(beta_reks)
     
-    folder_names = ["/central/groups/esm/dzhuang/pyqg_run/2layer/nx256beta" + str(betas[i]) + "rek0p3/" for i in range(len(betas))]
-    file_names = ["nx256beta" + str(betas[i]) + "rek0p3" for i in range(len(betas))] 
+    # todo rek  = 0.X, beta = X
+    # betas = [str(beta_reks[i][0]) for i in range(N_runs)]
+    # reks = ["rek0p" + str(np.int64(beta_reks[i][1]*10)) for i in range(N_runs)]
+    
+    file_names = ["nx256beta" + beta_rek_strs[i][0] + "rek" + beta_rek_strs[i][1]  for i in range(N_runs)] 
+    folder_names = ["/central/groups/esm/zhaoyi/pyqg_run/2layer/inhomogeneous/" + file_names[i] + "/" for i in range(N_runs)]
+    
 
     start, end, step = 500000, 1000000, 20000
 
@@ -168,20 +179,20 @@ def load_data(betas = [1, 2, 3]):
 
     for i in range(N_data):  
 
-        flow_means, flow_zonal_means = preprocess_data(folder_names[i], file_names[i], betas[i], dU, L, start, end, step)
+        flow_means, flow_zonal_means = preprocess_data(folder_names[i], file_names[i], beta_reks[i][0], dU, L, start, end, step)
         mu_mean[i, :, :], dpv_mean[i, :, :], u_mean, vor_mean, q_mean[i, :, :], psi_mean[i, :, :], closure_mean[i, :, :], psi_var_2_mean = flow_means[:8]
     
     
     mu_mean_clip = np.copy(mu_mean)
     # TODO: clean data
-    mu_mean[mu_mean <= 0.0 ] = 0.0
+    mu_mean_clip[mu_mean_clip <= 0.0 ] = 0.0
     for i in range(N_data):
         for layer in range(2):
-            mu_mean[i, layer, :] = scipy.ndimage.gaussian_filter1d(mu_mean[i, layer, :], 5)
+            mu_mean_clip[i, layer, :] = scipy.ndimage.gaussian_filter1d(mu_mean_clip[i, layer, :], 5)
 
     
-    physics_params = [QG_params(L=L, dU=dU, F1=F1, F2=F2, hyper_nu=hyper_nu, hyper_order=hyper_order, beta=beta, mu=mu)
-     for beta in betas]
+    physics_params = [QG_params(L=L, dU=dU, F1=F1, F2=F2, hyper_nu=hyper_nu, hyper_order=hyper_order, beta=beta, rek=rek)
+     for beta, rek in beta_reks]
     
     return physics_params, q_mean, psi_mean, dpv_mean,  mu_mean, mu_mean_clip,  closure_mean, yy, force
 
@@ -241,7 +252,7 @@ def nummodel_fft(permeability, beta1, beta2, q, psi, yy, res):
 
 
 def explicit_solve(model, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
-    L, dU, F1, F2, beta, mu = params.L, params.dU, params.F1, params.F2, params.beta, params.mu
+    L, dU, F1, F2, beta, rek = params.L, params.dU, params.F1, params.F2, params.beta, params.rek
     hyper_nu, hyper_order = params.hyper_nu, params.hyper_order
     
     _, Ny = q0.shape
@@ -264,61 +275,20 @@ def explicit_solve(model, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
         dd_psi2 = gradient_fft(psi[1, :], dy, 2)
         
         model(q, psi, yy, res)
-        tend[:,:] = f + res + hyperdiffusion(q, hyper_nu, hyper_order, dy)
-        tend[1,:] -= mu*dd_psi2
+        tend[:,:] = f + res          # Turn off hyperdiffusion    + hyperdiffusion(q, hyper_nu, hyper_order, dy)
+        tend[1,:] -= rek*dd_psi2
         
         q += dt * tend
         
         if i%save_every == 0:
             q_data[i//save_every, :, :] = q
-            t_data[i//save_every] = i*dt
+            t_data[i//save_every] = i*dt             
             print(i, "max q", np.max(q))
 
     return  yy, t_data, q_data
 
 
-# def solve(Ny, L, F1, F2, beta, mu, dU, hyper_nu, hyper_order, q0,
-#             dt, Nt, save_every,
-#             MODEL = "nummodel", mu_mean = [], clip_val = np.inf):
- 
-#     params = {
-#         "L":    L,
-#         "dU":   dU,
-#         "beta": beta,
-#         "mu":   mu,
-#         "F1":   F1,
-#         "F2":   F2,
-#         "nu":   hyper_nu,
-#         "hyperdiffusion_order": hyper_order
-#         }
 
-#     beta1, beta2 = beta + F1*dU, beta - F2*dU
-    
-#     # beta1, beta2 = beta + F1*dU, beta + F2*dU
-    
-#     f = np.zeros((2, Ny))
-#     yy = np.linspace(0, L - L/Ny, Ny)
-    
-
-
-#     if MODEL == "nummodel":
-#         mu_c = np.zeros((2, Ny))
-#         mu_c[0, :] = interpolate_f2c(mu_mean[0, :], bc="periodic")
-#         mu_c[1, :] = interpolate_f2c(mu_mean[1, :], bc="periodic")
-#         mu_c[mu_c > clip_val] = clip_val
-#         model = lambda q, psi, yy, params : nummodel(q, psi, yy, params, mu_c)
-#     elif MODEL == "nnmodel":
-#         mymodel_top, x_normalizer_top, y_normalizer_top          = torch.load("top_layer.model"),    torch.load("top_layer.model.x_normalizer"),    torch.load("top_layer.model.y_normalizer")
-#         mymodel_bottom, x_normalizer_bottom, y_normalizer_bottom = torch.load("bottom_layer.model"), torch.load("bottom_layer.model.x_normalizer"), torch.load("bottom_layer.model.y_normalizer")
-#         model = lambda q, psi, yy, params : nnmodel(q, psi, yy, params, mymodel_top, x_normalizer_top, y_normalizer_top, 
-#                                                 mymodel_bottom, x_normalizer_bottom, y_normalizer_bottom)
-#     else:
-#         print("ERROR")
-
-
-#     yy, t_data, q_data = explicit_solve(model, q0, f, params, dt = dt, Nt = Nt, save_every = save_every)
-    
-#     return yy, t_data, q_data
 
 
 

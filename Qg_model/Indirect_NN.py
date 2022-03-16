@@ -32,9 +32,9 @@ from Numerics import interpolate_f2c, gradient_first_f2c
 # # Load Training data
 
 
-betas = [1, 2, 3]
-phy_params, q_mean, psi_mean, dpv_mean,  mu_mean, mu_mean_clip,  closure_mean, xx, force = load_data(betas = [1, 2, 3])
-
+beta_rek_strs = [("1", "0p3"), ("2", "0p3"), ("3", "0p3"), ("1", "0p6"), ("2", "0p6"), ("3", "0p6")]
+beta_reks = [ (str_to_num(beta_rek_strs[i][0]), str_to_num(beta_rek_strs[i][1])) for i in range(len(beta_rek_strs)) ]
+phy_params, q_mean, psi_mean, dpv_mean,  mu_mean, mu_mean_clip,  closure_mean, xx, force = load_data(beta_rek_strs = beta_rek_strs, beta_reks = beta_reks)
 
 
 class QGParam:
@@ -76,18 +76,21 @@ def loss_aug(s_param, params):
     
     
     L = s_param.phy_params[0].L
-    q0 = np.zeros((2, Nx))
-    q0[0, :] = 1e-1 * np.sin(2*np.pi*xx/L)
-    q0[1, :] = 1e-1 * np.cos(2*np.pi*xx/L)
+
     
     net =  NeuralNet.create_net(ind, outd, layers, width, activation, initializer, outputlayer,  params)
     nn_model = partial(NeuralNet.nn_viscosity, net=net, mu_scale = mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma)
     
     for i in range(N_data):
         
+        q0 = np.zeros((2, Nx))
+        q0[0, :] = -s_param.phy_params[i].beta*L/2 * np.sin(2*np.pi*xx/L)
+        q0[1, :] =  s_param.phy_params[i].beta*L/2* np.cos(2*np.pi*xx/L)
+    
+
         beta1 = beta2 = s_param.phy_params[i].beta
-        model = lambda q, psi, yy, res : nummodel_fft(nn_model, beta1, beta2,  q, psi, yy, res)
-        yy, t_data, q_data = explicit_solve(model, force, q0, s_param.phy_params[i], dt = dt, Nt = Nt, save_every = save_every)
+        model = lambda q, psi, xx, res : nummodel_fft(nn_model, beta1, beta2,  q, psi, xx, res)
+        xx, t_data, q_data = explicit_solve(model, force, q0, s_param.phy_params[i], dt = dt, Nt = Nt, save_every = save_every)
 
         # TODO
         q_sol[i, :, :] = np.mean(q_data[Nt//(2*save_every):, :, :], axis=0)
@@ -101,19 +104,20 @@ def loss_aug(s_param, params):
 
 
 
-N_data = len(betas)
+N_data = len(beta_reks)
 y = q_mean.flatten()
 Sigma_eta = np.fabs(q_mean)
 for i in range(N_data):
     Sigma_eta[i, :] = np.mean(Sigma_eta[i, :])
 Sigma_eta = np.diag(np.reshape((Sigma_eta*0.01)**2, -1))
 
-
+L = 50*2*np.pi
 N_y = len(y)
-
+Nx = 256
+xx, dy = np.linspace(L/(2*Nx), L - L/(2*Nx), Nx), L/Nx
 dt = 4e-3 
 save_every = 1000
-Nt = 500000 
+Nt = 5000#500000 
 
 
 s_param = QGParam(phy_params, xx, dt, Nt, save_every, N_y,  ind, outd, layers, width, activation, initializer, outputlayer)
