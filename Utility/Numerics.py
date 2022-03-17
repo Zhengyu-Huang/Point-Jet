@@ -100,22 +100,12 @@ from scipy import sparse
 def gradient_fft(omega, dx, order):
     N = len(omega)
     L = dx*N
+      
     k2= np.zeros(N)
-
-    if ((N%2)==0):
-        #-even number                                                                                   
-        for i in range(1,N//2):
-            k2[i]=i
-            k2[N-i]=-i
-    else:
-        #-odd number                                                                                    
-        for i in range(1,(N-1)//2):
-            k2[i]=i
-            k2[N-i]=-i
-            
-    domega = np.copy(omega)
-    for i in range(order):
-        domega = 2*np.pi/L * ifft(1j*k2*fft(domega)).real
+    k2[0:N//2] = np.arange(0,N//2)
+    k2[N-1:N-N//2:-1] = -np.arange(1,N//2)
+    
+    domega = (2*np.pi/L)**order * ifft((1j*k2)**order * fft(omega)).real
     
     return domega
 
@@ -129,35 +119,25 @@ def psi_fft_sol(q, F1, F2, dy):
     L = dy*N
     
     k2= np.zeros(N)
-
-    if ((N%2)==0):
-        #-even number                                                                                   
-        for i in range(1,N//2):
-            k2[i]   =  i
-            k2[N-i] = -i
-    else:
-        #-odd number                                                                                    
-        for i in range(1,(N-1)//2):
-            k2[i]   =  i
-            k2[N-i] = -i
+    k2[0:N//2] = np.arange(0,N//2)
+    k2[N-1:N-N//2:-1] = -np.arange(1,N//2)
 
     ddx = - (2*np.pi/L)**2 * k2**2
 
-    q_h   = np.zeros((2, N), dtype=np.complex)
-    psi_h = np.zeros((2, N), dtype=np.complex)
+    q_h   = np.zeros((2, N), dtype=np.complex64)
+    psi_h = np.zeros((2, N), dtype=np.complex64)
     psi = np.copy(q)
 
     q_h[0, :], q_h[1, :] = fft(q[0,0:N]), fft(q[1,0:N])
-
-    for i in range(N):
-        det = ddx[i]**2 - (F2 + F1)*ddx[i]
-        if abs(det < 1e-10):
-            psi_h[0,i], psi_h[1,i] = 0.0, 0.0
-        else:
-            psi_h[0,i] = ((ddx[i]-F2)*q_h[0,i] - F1*q_h[1,i])/det 
-            psi_h[1,i] = (-F2*q_h[0,i] + (ddx[i]-F1)*q_h[1,i])/det
-
-
+    
+    det = ddx**2 - (F2 + F1)*ddx
+    zero_ind = (abs(det) < 1e-10)
+    non_zero_ind = ~zero_ind
+    
+    psi_h[0,non_zero_ind] = ((ddx[non_zero_ind]-F2)*q_h[0,non_zero_ind] - F1*q_h[1,non_zero_ind])  / det[non_zero_ind] 
+    psi_h[1,non_zero_ind] = (-F2*q_h[0,non_zero_ind] + (ddx[non_zero_ind]-F1)*q_h[1,non_zero_ind]) / det[non_zero_ind]
+    psi_h[:,zero_ind] = 0.0
+      
     psi[0, 0:N] = ifft(psi_h[0,:]).real
     psi[1, 0:N] = ifft(psi_h[1,:]).real
     

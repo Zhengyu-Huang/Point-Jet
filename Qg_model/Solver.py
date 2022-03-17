@@ -273,17 +273,17 @@ def explicit_solve(model, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
     for i in range(1, Nt+1): 
         psi = psi_fft_sol(q, F1, F2, dy)
         dd_psi2 = gradient_fft(psi[1, :], dy, 2)
-        
+
         model(q, psi, yy, res)
         tend[:,:] = f + res          # Turn off hyperdiffusion    + hyperdiffusion(q, hyper_nu, hyper_order, dy)
         tend[1,:] -= rek*dd_psi2
-        
+
         q += dt * tend
         
         if i%save_every == 0:
             q_data[i//save_every, :, :] = q
             t_data[i//save_every] = i*dt             
-            print(i, "max q", np.max(q))
+#             print(i, "max q", np.max(q))
 
     return  yy, t_data, q_data
 

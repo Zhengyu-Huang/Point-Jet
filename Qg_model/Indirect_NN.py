@@ -117,7 +117,7 @@ Nx = 256
 xx, dy = np.linspace(L/(2*Nx), L - L/(2*Nx), Nx), L/Nx
 dt = 4e-3 
 save_every = 1000
-Nt = 5000#500000 
+Nt = 400000 
 
 
 s_param = QGParam(phy_params, xx, dt, Nt, save_every, N_y,  ind, outd, layers, width, activation, initializer, outputlayer)
