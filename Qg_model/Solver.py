@@ -22,10 +22,10 @@ import NeuralNet
 #########################################
 ind, outd, width = 2, 1, 10
 layers = 2
-activation, initializer, outputlayer = "sigmoid", "default", "None"
-mu_scale = 2.0
+activation, initializer, outputlayer = "sigmoid", "default", "none"
+mu_scale = 10.0
 non_negative = True
-filter_on=True
+filter_on = True
 filter_sigma = 5.0
 # input scale
 q_scale = 100
@@ -213,32 +213,43 @@ def hyperdiffusion(q, nu, hyper_n, dy):
     return -np.vstack((dnq1, dnq2))
 
 
-def nummodel(permeability, beta1, beta2, q, psi, yy, res):
+# def nummodel(permeability, beta1, beta2, q, psi, yy, res):
     
-    dy = yy[1] - yy[0]
-    q1, q2 = q[0, :], q[1, :]
-    dq1, dq2 = gradient_first_f2c(q1, dy, bc="periodic"), gradient_first_f2c(q2, dy, bc="periodic")
+#     dy = yy[1] - yy[0]
     
-    q = np.hstack((q1,q2)) / q_scale
-    dq = np.hstack((dq1,dq2)) / dpv_scale
-    x = np.vstack((q , dq)).T
-    mu = permeability(x = x)
-    mu_c1 = mu[0: len(yy)]
-    mu_c2 = mu[len(yy):]
+#     # from face to center and then back to face
+#     q1, q2 = interpolate_f2c(q[0, :], bc="periodic"), interpolate_f2c(q[1, :], bc="periodic")
+#     dq1, dq2 = gradient_first_f2c(q1, dy, bc="periodic"), gradient_first_f2c(q2, dy, bc="periodic")
     
-    res[0, :] = gradient_first_c2f(mu_c1 * (dq1 + beta1), dy, bc="periodic")
-    res[1, :] = gradient_first_c2f(mu_c2 * (dq2 + beta2), dy, bc="periodic")
+#     q = np.hstack((q1,q2)) / q_scale
+# #     dq = np.hstack((dq1,dq2)) / dpv_scale
+# #     x = np.vstack((q , dq)).T
+#     dpv = np.hstack((dq1 + beta1,dq2 + beta2)) / dpv_scale
+#     x = np.vstack((q , dpv)).T
+    
+#     mu = permeability(x = x)
+#     mu_c1 = mu[0: len(yy)]
+#     mu_c2 = mu[len(yy):]
+    
+#     res[0, :] = gradient_first_c2f(mu_c1 * (dq1 + beta1), dy, bc="periodic")
+#     res[1, :] = gradient_first_c2f(mu_c2 * (dq2 + beta2), dy, bc="periodic")
     
 
 def nummodel_fft(permeability, beta1, beta2, q, psi, yy, res):
     
     dy = yy[1] - yy[0]
+    
+    # all are at the cell center
     q1, q2 = q[0, :], q[1, :]
     dq1, dq2 = gradient_fft(q1, dy, 1), gradient_fft(q2, dy, 1)
     
     q = np.hstack((q1,q2)) / q_scale
-    dq = np.hstack((dq1,dq2)) /dpv_scale
-    x = np.vstack((q , dq)).T
+#     dq = np.hstack((dq1,dq2)) /dpv_scale
+#     x = np.vstack((q , dq)).T
+    
+    dpv = np.hstack((dq1 + beta1,dq2 + beta2)) / dpv_scale
+    x = np.vstack((q , dpv)).T
+    
     mu = permeability(x = x)
     mu_c1 = mu[0: len(yy)]
     mu_c2 = mu[len(yy):]
@@ -282,8 +293,10 @@ def explicit_solve(model, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
         
         if i%save_every == 0:
             q_data[i//save_every, :, :] = q
-            t_data[i//save_every] = i*dt             
-#             print(i, "max q", np.max(q))
+            t_data[i//save_every] = i*dt  
+            
+        if i == Nt or i == Nt//2:
+            print(i, "max q", np.max(q))
 
     return  yy, t_data, q_data
 

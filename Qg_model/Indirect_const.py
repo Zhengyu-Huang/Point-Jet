@@ -38,32 +38,23 @@ phy_params, q_mean, psi_mean, dpv_mean,  mu_mean, mu_mean_clip,  closure_mean, x
 
 
 class QGParam:
-    def __init__(self, phy_params, xx, dt, Nt, save_every,  N_y, ind, outd, layers, width, activation, initializer, outputlayer):
+    def __init__(self, phy_params, xx, dt, Nt, save_every,  N_y):
         self.theta_names = ["hyperparameters"]
         self.xx = xx
         self.force  = force  
-        self.ind  = ind
-        self.outd = outd
-        self.width = width
-        self.activation = activation
-        self.initializer = initializer
-        self.outputlayer = outputlayer
         self.phy_params = phy_params
         
         self.dt = dt
         self.Nt = Nt
         self.save_every = save_every
         
-        N_theta = ind*width + (layers - 2)*width**2 + width*outd + (layers - 1)*width + outd
+        N_theta = 2
         self.N_theta = N_theta
         
         self.N_y = N_y + N_theta 
         
         
 def loss_aug(s_param, params):
-    
-    ind, outd, width   = s_param.ind, s_param.outd, s_param.width
-    activation, initializer, outputlayer = s_param.activation, s_param.initializer, s_param.outputlayer
     
     dt, Nt, save_every = s_param.dt,  s_param.Nt,   s_param.save_every
     xx = s_param.xx
@@ -78,8 +69,12 @@ def loss_aug(s_param, params):
     L = s_param.phy_params[0].L
 
     
-    net =  NeuralNet.create_net(ind, outd, layers, width, activation, initializer, outputlayer,  params)
-    nn_model = partial(NeuralNet.nn_viscosity, net=net, mu_scale = mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma)
+    def mu_model(x):
+        mu_c = np.zeros(2*Nx)
+        mu_c[0:Nx] = params[0]
+        mu_c[Nx:2*Nx] = params[1]
+        return mu_c
+
     
     for i in range(N_data):
         
@@ -89,7 +84,7 @@ def loss_aug(s_param, params):
     
 
         beta1 = beta2 = s_param.phy_params[i].beta
-        model = lambda q, psi, xx, res : nummodel_fft(nn_model, beta1, beta2,  q, psi, xx, res)
+        model = lambda q, psi, xx, res : nummodel_fft(mu_model, beta1, beta2,  q, psi, xx, res)
         xx, t_data, q_data = explicit_solve(model, force, q0, s_param.phy_params[i], dt = dt, Nt = Nt, save_every = save_every)
 
         # TODO
@@ -120,12 +115,11 @@ save_every = 1000
 Nt = 400000 
 
 
-s_param = QGParam(phy_params, xx, dt, Nt, save_every, N_y,  ind, outd, layers, width, activation, initializer, outputlayer)
+s_param = QGParam(phy_params, xx, dt, Nt, save_every, N_y)
 N_theta = s_param.N_theta
 
 
-# theta0_mean_init = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer).get_params()
-theta0_mean_init = torch.load("direct.nn").get_params()
+theta0_mean_init = np.array([10.0, 20.0])
 
 theta0_mean = np.zeros(N_theta)
 theta0_cov = np.zeros((N_theta, N_theta))
@@ -141,7 +135,7 @@ update_freq = 1
 N_iter = 50
 gamma = 1.0
 
-save_folder = "indirect_NN"
+save_folder = "indirect_const"
 uki_obj = KalmanInversion.UKI_Run(s_param, loss_aug, 
     theta0_mean, theta0_mean_init, 
     theta0_cov,  theta0_cov_init,

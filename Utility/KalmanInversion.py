@@ -398,6 +398,7 @@ def UKI_Run(s_param, forward,
     opt_errors = []
     
     i = 0
+    pickle.dump(ukiobj, open(save_folder+"/ukiobj-" + str(i) + ".dat", "wb" ) )
     
     decrease_step = 0
     while i < N_iter:
@@ -421,7 +422,6 @@ def UKI_Run(s_param, forward,
             
         opt_errors.append(opt_error)
         
-        pickle.dump(ukiobj, open(save_folder+"/ukiobj-" + str(i) + ".dat", "wb" ) )
             
         print("ukiobj.gamma : ", ukiobj.gamma)
         print( "optimization error at iter ", i, " = ", opt_errors[i] )
@@ -431,6 +431,9 @@ def UKI_Run(s_param, forward,
               "reg : ", 0.5*np.dot((y_pred[-N_theta:] - ukiobj.y[-N_theta:]) , np.linalg.solve(ukiobj.Sigma_eta[-N_theta:,-N_theta:], (y_pred[-N_theta:] - ukiobj.y[-N_theta:]))))
         print( "Frobenius norm of the covariance at iter ", i, " = ", np.linalg.norm(ukiobj.theta_cov[i]) ) 
         i += 1
+        
+        pickle.dump(ukiobj, open(save_folder+"/ukiobj-" + str(i) + ".dat", "wb" ) )
+        
         
         
     return ukiobj
