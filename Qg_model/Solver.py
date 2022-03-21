@@ -21,7 +21,7 @@ import NeuralNet
 # Neural network information
 #########################################
 ind, outd, width = 2, 1, 10
-layers = 2
+layers = 1
 activation, initializer, outputlayer = "sigmoid", "default", "none"
 mu_scale = 10.0
 non_negative = True

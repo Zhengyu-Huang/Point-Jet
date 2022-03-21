@@ -150,7 +150,8 @@ class PoissonParam:
         self.dbc = dbc
         
         
-        N_theta = ind*width + (layers - 2)*width**2 + width*outd + (layers - 1)*width + outd
+        N_theta = ind*width + (layers - 2)*width**2 + width*outd + (layers - 1)*width + outd if layers > 1 else ind*outd + outd
+        
         self.N_theta = N_theta
         
         

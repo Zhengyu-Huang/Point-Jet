@@ -54,7 +54,7 @@ class QGParam:
         self.Nt = Nt
         self.save_every = save_every
         
-        N_theta = ind*width + (layers - 2)*width**2 + width*outd + (layers - 1)*width + outd
+        N_theta = ind*width + (layers - 2)*width**2 + width*outd + (layers - 1)*width + outd if layers > 1 else ind*outd + outd
         self.N_theta = N_theta
         
         self.N_y = N_y + N_theta 
@@ -123,9 +123,9 @@ Nt = 400000
 s_param = QGParam(phy_params, xx, dt, Nt, save_every, N_y,  ind, outd, layers, width, activation, initializer, outputlayer)
 N_theta = s_param.N_theta
 
-
-# theta0_mean_init = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer).get_params()
-theta0_mean_init = torch.load("direct.nn").get_params()
+print("N_theta = ", N_theta)
+theta0_mean_init = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer).get_params()
+# theta0_mean_init = torch.load("direct.nn").get_params()
 
 theta0_mean = np.zeros(N_theta)
 theta0_cov = np.zeros((N_theta, N_theta))
