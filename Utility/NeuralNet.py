@@ -511,9 +511,9 @@ def nn_viscosity(net, x, mu_scale=1.0, non_negative=False, filter_on=False, filt
     mu = net_eval(x=x, net=net, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
     return mu
 
-def nn_flux(net, x,  mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):
-    mu = nn_viscosity(net=net, x=x, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
-    return mu*dq
+# def nn_flux(net, x,  mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):
+#     mu = nn_viscosity(net=net, x=x, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
+#     return mu*dq
 
 
 
