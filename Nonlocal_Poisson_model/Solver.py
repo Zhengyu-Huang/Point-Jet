@@ -32,10 +32,13 @@ filter_sigma = 5.0
 
 
 
-def permeability_ref(x, filter_sigma=5.0):
+def permeability_ref(x, filter_on=False, filter_sigma=5.0):
     q, dq = x[:, 0], x[:, 1]
     mu = np.sqrt(q**2 + dq**2) 
-    mu =  scipy.ndimage.gaussian_filter1d(mu, filter_sigma, mode="nearest")         
+    
+    if filter_on:
+        mu =  scipy.ndimage.gaussian_filter1d(mu, filter_sigma, mode="nearest") 
+
     return mu
 
 

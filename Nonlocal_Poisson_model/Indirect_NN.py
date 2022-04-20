@@ -79,7 +79,7 @@ xx, f, q, q_c, dq_c = np.zeros((n_data, Nx)), np.zeros((n_data, Nx)), np.zeros((
 GENERATE_DATA = True
 if GENERATE_DATA:
     delta = 0.2
-    premeability = lambda x : permeability_ref(x, delta/dx)
+    permeability = lambda x : permeability_ref(x, delta/dx)
     for i in range(n_data):
         xx[i, :], f[i, :], q[i, :], q_c[i, :], dq_c[i, :] = generate_data_helper(permeability, f_funcs[i], L=L, Nx=Nx)
         

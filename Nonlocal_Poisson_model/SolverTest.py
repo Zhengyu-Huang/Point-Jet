@@ -4,7 +4,7 @@ import numpy as np
 from scipy.sparse.linalg import spsolve
 from scipy import sparse
 import matplotlib.pyplot as plt
-from Solver import nummodel, explicit_solve
+from Solver import nummodel, explicit_solve, permeability_ref
 
 L = 1.0
 dbc = np.array([0.0, 0.0]) 
@@ -12,15 +12,6 @@ dbc = np.array([0.0, 0.0])
 def func(xx, A = 10):
     return A * xx
 
-
-def permeability_ref(x, filter_on=False, filter_sigma=5.0):
-    q, dq = x[:, 0], x[:, 1]
-    mu = np.sqrt(q**2 + dq**2) 
-    
-    if filter_on:
-        mu =  scipy.ndimage.gaussian_filter1d(mu, delta_dy, mode="nearest") 
-
-    return mu
 
 plt.figure()
 Ny = 100
