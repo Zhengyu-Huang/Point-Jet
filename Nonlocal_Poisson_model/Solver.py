@@ -32,10 +32,10 @@ filter_sigma = 5.0
 
 
 
-def permeability_ref(x, delta_dy):
+def permeability_ref(x, filter_sigma=5.0):
     q, dq = x[:, 0], x[:, 1]
     mu = np.sqrt(q**2 + dq**2) 
-    mu =  scipy.ndimage.gaussian_filter1d(mu, delta_dy, mode="nearest")         
+    mu =  scipy.ndimage.gaussian_filter1d(mu, filter_sigma, mode="nearest")         
     return mu
 
 
@@ -73,7 +73,7 @@ def explicit_solve(model, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
 
 
  
-def nummodel(permeability, q, yy, res, delta = 0.2):
+def nummodel(permeability, q, yy, res):
     
     Ny = yy.size
     dy = yy[1] - yy[0]
@@ -81,9 +81,7 @@ def nummodel(permeability, q, yy, res, delta = 0.2):
     q_c = interpolate_f2c(q)
     x = np.vstack((q_c, dq_c)).T
     
-    
-    delta_dy = delta/dy 
-    mu_c = permeability(x = x, delta_dy = delta_dy)
+    mu_c = permeability(x = x)
 
     res[:] = gradient_first_c2f(mu_c*(dq_c), dy)
 

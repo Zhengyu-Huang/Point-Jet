@@ -272,7 +272,7 @@ def ensemble(s_param, theta_ens, forward, parallel_flag = True):
     
     
     if parallel_flag == True:
-        pool = multiprocessing.Pool(multiprocessing.cpu_count())
+        pool = multiprocessing.Pool(min(multiprocessing.cpu_count(), N_ens))
         results = []
         for i in range(N_ens):
             results.append(pool.apply_async(forward, (s_param, theta_ens[i,:], )))
@@ -427,6 +427,7 @@ def UKI_Run(s_param, forward,
         print( "optimization error at iter ", i, " = ", opt_errors[i] )
         
         N_theta, N_y = len(theta0_mean), len(y)
+        print("Parameters are: ", ukiobj.theta_mean[-1])
         print("data-misfit : ", 0.5*np.dot((y_pred[0:N_y-N_theta] - ukiobj.y[0:N_y-N_theta]) , np.linalg.solve(ukiobj.Sigma_eta[0:N_y-N_theta,0:N_y-N_theta], (y_pred[0:N_y-N_theta] - ukiobj.y[0:N_y-N_theta]))),  
               "reg : ", 0.5*np.dot((y_pred[-N_theta:] - ukiobj.y[-N_theta:]) , np.linalg.solve(ukiobj.Sigma_eta[-N_theta:,-N_theta:], (y_pred[-N_theta:] - ukiobj.y[-N_theta:]))))
         print( "Frobenius norm of the covariance at iter ", i, " = ", np.linalg.norm(ukiobj.theta_cov[i]) ) 

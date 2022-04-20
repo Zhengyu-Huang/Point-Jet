@@ -8,7 +8,7 @@ import matplotlib.animation as animation
 
 import sys
 sys.path.append('../Utility')
-from Numerics import gradient_first,  gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c, psi_fft_sol, gradient_fft
+from Numerics import gradient_first,  gradient_first_c2f, gradient_first_f2c, interpolate_c2f, interpolate_f2c, psi_fft_sol, gradient_fft, precomp_fft
 import NeuralNet
 
 
@@ -20,16 +20,18 @@ import NeuralNet
 #########################################
 # Neural network information
 #########################################
-ind, outd, width = 2, 1, 10
-layers = 1
-activation, initializer, outputlayer = "sigmoid", "default", "none"
-mu_scale = 10.0
+ind, outd, width = 3, 1, 5
+layers = 2
+activation, initializer, outputlayer = "sigmoid", "default", "sigmoid"
+mu_scale = 100.0
 non_negative = True
 filter_on = True
 filter_sigma = 5.0
 # input scale
 q_scale = 100
 dpv_scale = 10
+psi_scale = 100
+mu_low = 5.0
 
 def str_to_num(x):
     if x.find("p") == -1:
@@ -174,13 +176,13 @@ def load_data(beta_rek_strs, beta_reks):
     start, end, step = 500000, 1000000, 20000
 
     N_data = len(folder_names)
-    mu_mean,  closure_mean,  dpv_mean, q_mean, psi_mean = np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny))
+    mu_mean,  closure_mean,  dpv_mean, q_mean, psi_mean, u_mean = np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny)), np.zeros((N_data, 2, Ny))
 
 
     for i in range(N_data):  
 
         flow_means, flow_zonal_means = preprocess_data(folder_names[i], file_names[i], beta_reks[i][0], dU, L, start, end, step)
-        mu_mean[i, :, :], dpv_mean[i, :, :], u_mean, vor_mean, q_mean[i, :, :], psi_mean[i, :, :], closure_mean[i, :, :], psi_var_2_mean = flow_means[:8]
+        mu_mean[i, :, :], dpv_mean[i, :, :], u_mean[i, :, :], vor_mean, q_mean[i, :, :], psi_mean[i, :, :], closure_mean[i, :, :], psi_var_2_mean = flow_means[:8]
     
     
     mu_mean_clip = np.copy(mu_mean)
@@ -235,34 +237,36 @@ def hyperdiffusion(q, nu, hyper_n, dy):
 #     res[1, :] = gradient_first_c2f(mu_c2 * (dq2 + beta2), dy, bc="periodic")
     
 
-def nummodel_fft(permeability, beta1, beta2, q, psi, yy, res):
+
+
+def nummodel_fft(permeability, beta1, beta2, q, psi, yy, res, k2, dealiasing_filter):
     
     dy = yy[1] - yy[0]
     
     # all are at the cell center
-    q1, q2 = q[0, :], q[1, :]
-    dq1, dq2 = gradient_fft(q1, dy, 1), gradient_fft(q2, dy, 1)
     
-    q = np.hstack((q1,q2)) / q_scale
-#     dq = np.hstack((dq1,dq2)) /dpv_scale
-#     x = np.vstack((q , dq)).T
+    dq1, dq2 = gradient_fft(q[0, :], dy, 1, k2, dealiasing_filter), gradient_fft(q[1, :], dy, 1, k2, dealiasing_filter)
+    dpv = np.hstack((dq1 + beta1,dq2 + beta2)) / dpv_scale  
     
-    dpv = np.hstack((dq1 + beta1,dq2 + beta2)) / dpv_scale
-    x = np.vstack((q , dpv)).T
+    x = np.vstack((np.fabs(q).flatten()/q_scale, dpv, np.fabs(psi).flatten()/psi_scale)).T
     
-    mu = permeability(x = x)
+    # x = np.vstack((dpv, np.fabs(psi).flatten()/psi_scale)).T
+    
+    # x = dpv.reshape((-1, 1))
+    
+    mu = permeability(x = x)  + mu_low 
     mu_c1 = mu[0: len(yy)]
     mu_c2 = mu[len(yy):]
     
-    res[0, :] = gradient_fft(mu_c1 * (dq1 + beta1), dy, 1)
-    res[1, :] = gradient_fft(mu_c2 * (dq2 + beta2), dy, 1)
+    res[0, :] = gradient_fft(mu_c1 * (dq1 + beta1), dy, 1, k2, dealiasing_filter)
+    res[1, :] = gradient_fft(mu_c2 * (dq2 + beta2), dy, 1, k2, dealiasing_filter)
     
     
 
     
 
 
-def explicit_solve(model, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
+def explicit_solve(model_fft, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
     L, dU, F1, F2, beta, rek = params.L, params.dU, params.F1, params.F2, params.beta, params.rek
     hyper_nu, hyper_order = params.hyper_nu, params.hyper_order
     
@@ -281,11 +285,13 @@ def explicit_solve(model, f, q0, params, dt = 1.0, Nt = 1000, save_every = 1):
     tend = np.zeros((2, Ny))
     res = np.zeros((2, Ny))
     
+    k2, dealiasing_filter = precomp_fft(Ny)
+    
     for i in range(1, Nt+1): 
-        psi = psi_fft_sol(q, F1, F2, dy)
-        dd_psi2 = gradient_fft(psi[1, :], dy, 2)
+        psi = psi_fft_sol(q, F1, F2, dy, k2, dealiasing_filter)
+        dd_psi2 = gradient_fft(psi[1, :], dy, 2, k2, dealiasing_filter)
 
-        model(q, psi, yy, res)
+        model_fft(q, psi, yy, res, k2, dealiasing_filter)
         tend[:,:] = f + res          # Turn off hyperdiffusion    + hyperdiffusion(q, hyper_nu, hyper_order, dy)
         tend[1,:] -= rek*dd_psi2
 

@@ -97,15 +97,32 @@ from scipy import sparse
 #     return dd_omega
 
 
-def gradient_fft(omega, dx, order):
-    N = len(omega)
-    L = dx*N
-      
-    k2= np.zeros(N)
+def precomp_fft(N):
+    
+    k2= np.zeros(N, dtype=np.int64)
     k2[0:N//2] = np.arange(0,N//2)
     k2[N-1:N-N//2:-1] = -np.arange(1,N//2)
     
-    domega = (2*np.pi/L)**order * ifft((1j*k2)**order * fft(omega)).real
+    dealiasing_filter = np.ones_like(k2)
+    dealiasing_filter[np.abs(k2) >=  N/3] = 0.0
+    
+    return k2, dealiasing_filter
+
+
+
+def gradient_fft(omega, dx, order, k2 = None, dealiasing_filter = None):
+    N = len(omega)
+    L = dx*N
+    
+    if k2 is None or dealiasing_filter is None:
+        k2, dealiasing_filter = precomp_fft(N)
+#     k2= np.zeros(N, dtype=np.int64)
+#     k2[0:N//2] = np.arange(0,N//2)
+#     k2[N-1:N-N//2:-1] = -np.arange(1,N//2)
+#     dealiasing_filter = np.ones_like(k2)
+#     dealiasing_filter[np.abs(k2) >=  N/3] = 0.0
+    
+    domega = (2*np.pi/L)**order * ifft((1j*k2)**order * fft(omega) * dealiasing_filter).real
     
     return domega
 
@@ -114,13 +131,19 @@ def gradient_fft(omega, dx, order):
 # solve psi from q by FFT
 # q_1 = dd psi_1 + F1(psi_2 - psi_1)
 # q_2 = dd psi_2 + F2(psi_1 - psi_2)
-def psi_fft_sol(q, F1, F2, dy):
+def psi_fft_sol(q, F1, F2, dy, k2 = None, dealiasing_filter = None):
     _, N = q.shape 
     L = dy*N
     
-    k2= np.zeros(N)
-    k2[0:N//2] = np.arange(0,N//2)
-    k2[N-1:N-N//2:-1] = -np.arange(1,N//2)
+    
+    if k2 is None or dealiasing_filter is None:
+        k2, dealiasing_filter = precomp_fft(N)
+        
+#     k2= np.zeros(N)
+#     k2[0:N//2] = np.arange(0,N//2)
+#     k2[N-1:N-N//2:-1] = -np.arange(1,N//2)
+#     dealiasing_filter = np.ones_like(k2)
+#     dealiasing_filter[np.abs(k2) >=  N/3] = 0.0
 
     ddx = - (2*np.pi/L)**2 * k2**2
 
@@ -130,13 +153,15 @@ def psi_fft_sol(q, F1, F2, dy):
 
     q_h[0, :], q_h[1, :] = fft(q[0,0:N]), fft(q[1,0:N])
     
+    
+    
     det = ddx**2 - (F2 + F1)*ddx
-    zero_ind = (abs(det) < 1e-10)
-    non_zero_ind = ~zero_ind
+
+    non_zero_ind = np.logical_and((np.fabs(det) > 1e-10), dealiasing_filter)
     
     psi_h[0,non_zero_ind] = ((ddx[non_zero_ind]-F2)*q_h[0,non_zero_ind] - F1*q_h[1,non_zero_ind])  / det[non_zero_ind] 
     psi_h[1,non_zero_ind] = (-F2*q_h[0,non_zero_ind] + (ddx[non_zero_ind]-F1)*q_h[1,non_zero_ind]) / det[non_zero_ind]
-    psi_h[:,zero_ind] = 0.0
+#     psi_h[:,zero_ind] = 0.0
       
     psi[0, 0:N] = ifft(psi_h[0,:]).real
     psi[1, 0:N] = ifft(psi_h[1,:]).real

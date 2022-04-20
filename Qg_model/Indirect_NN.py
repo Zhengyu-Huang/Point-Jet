@@ -80,7 +80,7 @@ def loss_aug(s_param, params):
     
     net =  NeuralNet.create_net(ind, outd, layers, width, activation, initializer, outputlayer,  params)
     nn_model = partial(NeuralNet.nn_viscosity, net=net, mu_scale = mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma)
-    
+    print("start with params: ", params)
     for i in range(N_data):
         
         q0 = np.zeros((2, Nx))
@@ -89,7 +89,7 @@ def loss_aug(s_param, params):
     
 
         beta1 = beta2 = s_param.phy_params[i].beta
-        model = lambda q, psi, xx, res : nummodel_fft(nn_model, beta1, beta2,  q, psi, xx, res)
+        model = lambda q, psi, xx, res, k2, dealiasing_filter : nummodel_fft(nn_model, beta1, beta2,  q, psi, xx, res, k2, dealiasing_filter)
         xx, t_data, q_data = explicit_solve(model, force, q0, s_param.phy_params[i], dt = dt, Nt = Nt, save_every = save_every)
 
         # TODO
@@ -125,13 +125,13 @@ N_theta = s_param.N_theta
 
 print("N_theta = ", N_theta)
 theta0_mean_init = NeuralNet.FNN(ind, outd, layers, width, activation, initializer, outputlayer).get_params()
-# theta0_mean_init = torch.load("direct.nn").get_params()
+# theta0_mean_init = torch.load("pretrain.nn").get_params()
 
 theta0_mean = np.zeros(N_theta)
 theta0_cov = np.zeros((N_theta, N_theta))
 np.fill_diagonal(theta0_cov, 100.0**2)  
 theta0_cov_init = np.zeros((N_theta, N_theta))
-np.fill_diagonal(theta0_cov_init, 0.1**2)  
+np.fill_diagonal(theta0_cov_init, 0.01**2)  
 
 y_aug = np.hstack((y, theta0_mean))
 Sigma_eta_aug = block_diag(Sigma_eta, theta0_cov)

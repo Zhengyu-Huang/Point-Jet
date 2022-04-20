@@ -50,8 +50,7 @@ def generate_data_helper(permeability, f_func, L=1.0, Nx = 100):
     f = f_func(xx)   
     dbc = np.array([0.0, 0.0]) 
     
-    delta = 0.2
-    model = lambda q, yy, res : nummodel(permeability, q, yy, res, delta)
+    model = lambda q, yy, res : nummodel(permeability, q, yy, res)
     xx, t_data, q_data = explicit_solve(model, f, dbc, dt = 5.0e-6, Nt = 500000, save_every = 100000, L = L)
 
     
@@ -73,13 +72,16 @@ for i in range(1,n_data):
     
 L = 1.0
 Nx = 100
+dx = L/(Nx - 1)
 n_data = len(f_funcs)
 xx, f, q, q_c, dq_c = np.zeros((n_data, Nx)), np.zeros((n_data, Nx)), np.zeros((n_data, Nx)), np.zeros((n_data, Nx-1)), np.zeros((n_data, Nx-1))
 
 GENERATE_DATA = True
 if GENERATE_DATA:
+    delta = 0.2
+    premeability = lambda x : permeability_ref(x, delta/dx)
     for i in range(n_data):
-        xx[i, :], f[i, :], q[i, :], q_c[i, :], dq_c[i, :] = generate_data_helper(permeability_ref, f_funcs[i], L=L, Nx=Nx)
+        xx[i, :], f[i, :], q[i, :], q_c[i, :], dq_c[i, :] = generate_data_helper(permeability, f_funcs[i], L=L, Nx=Nx)
         
     np.save("xx.npy",   xx)
     np.save("f.npy",    f)
@@ -121,8 +123,9 @@ def loss_aug(s_param, params):
     q_sol = np.zeros((N_data, Nx))
     
     delta = params[0]
+    dx = xx[1] - xx[0]
     net =  NeuralNet.create_net(ind, outd, layers, width, activation, initializer, outputlayer,  params[1:])
-    nn_model = partial(NeuralNet.nn_viscosity, net=net, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma)
+    nn_model = partial(NeuralNet.nn_viscosity, net=net, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=delta/dx)
     model = lambda q, xx, res : nummodel(nn_model, q, xx, res, delta)
     
     for i in range(N_data):
@@ -161,7 +164,7 @@ class PoissonParam:
         
         
         N_theta = ind*width + (layers - 2)*width**2 + width*outd + (layers - 1)*width + outd if layers > 1 else ind*outd + outd
-        
+        # the length scale parameter
         self.N_theta = N_theta + 1
         
         
