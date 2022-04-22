@@ -1,0 +1,54 @@
+## Training
+
+Set up the training set at `indirect_NN.py` line 35
+```
+beta_rek_strs = [("1", "0p3"), ("2", "0p3"), ("3", "0p3"), ("1", "0p6"), ("2", "0p6"), ("3", "0p6")]
+```
+the first number is beta, the second number is rek
+
+
+
+## Test:
+Test neural network in `Test_NN.ipynb`
+Test_NN.ipynb 2nd cell, load these reference data
+```
+beta_rek_strs = [("1", "0p3"), ("2", "0p3"), ("3", "0p3"), ("1", "0p6"), ("2", "0p6"), ("3", "0p6")]
+```
+Test_NN.ipynb, choose which test case to run
+```
+test_ind = 1
+```
+
+
+Test uki input, set 
+```
+TRAINING_TYPE = "indirect"
+```
+update `uki_iter` to the uki iteration output you want to use
+```
+(save_folder, uki_iter) = ("indirect_NN" , 34)
+```
+
+
+# Change neural network input
+Change neural network inputs in `Solver.py` line 251 in function `nummodel_fft`
+After you change it, also change the number of input `ind`  in `Solver.py` line 23
+You can also change other neural network parameters in `Solver.py` starting from line 23
+
+`width`: neural network width
+`layers` : number of layers, including both hidden layers and the output layer
+`activation` : activation functions, sigmoid, ReLU
+`initializer`: initialization method 
+`outputlayer`: activation function after the output layer
+
+The neural network 
+```mu_scale * NN(x/scale) +  mu_low```
+
+
+
+
+
+
+
+
+
