@@ -31,6 +31,7 @@ update `uki_iter` to the uki iteration output you want to use
 
 
 # Change neural network input
+
 Change neural network inputs in `Solver.py` line 251 in function `nummodel_fft`
 After you change it, also change the number of input `ind`  in `Solver.py` line 23
 You can also change other neural network parameters in `Solver.py` starting from line 23
@@ -45,10 +46,18 @@ The neural network
 ```mu_scale * NN(x/scale) +  mu_low```
 
 
+# Change neural network output
+The observation data is set at `indirect_NN.py` line 177, and the observation error depends on the observation data (do not forget to change it)
 
+```y = np.reshape(q, -1)
+   Sigma_eta = np.fabs(q)
+```
 
+The model output also needs to change, it is at `indirect_NN.py` line 135
 
-
+```return np.hstack((np.reshape(q_sol, -1), params))
+```
+So far, the observation is the solution q.
 
 
 
