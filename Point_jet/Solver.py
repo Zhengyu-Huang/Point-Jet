@@ -14,7 +14,7 @@ import torch
 # from Utility import gradient_first, gradient_second, gradient_first_c2f, gradient_first_f2c, interpolate_c2f
 import sys
 sys.path.append('../Utility')
-from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c
+from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c, gradient_first
 import NeuralNet
 
 #########
@@ -23,11 +23,14 @@ import NeuralNet
 ind, outd, width = 2, 1, 10
 layers = 2
 activation, initializer, outputlayer = "sigmoid", "default", "None"
-mu_scale = 0.1
+
 non_negative = True
 filter_on=True
 filter_sigma = 5.0
 
+mu_scale = 0.1
+flux_scale = 0.1
+source_scale = 0.1
 
 def load_data(data_dir):
     
@@ -137,9 +140,19 @@ def nummodel_flux(flux, q, yy, res):
     M_c = flux(x = x)
     res[:] = gradient_first_c2f(M_c, dy)
 
+def nummodel_source(source, q, yy, res):
+    
+    Ny = yy.size
+    dy = yy[1] - yy[0]
+    dq = gradient_first(q, dy)
+    x = np.vstack((q, dq)).T
+    S_f = source(x = x)
+    res[:] = S_f[1:-1]
+    
+    
+    
 
-
-
+    
 
 # tau = 10.0
 # N = 384

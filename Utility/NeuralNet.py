@@ -131,7 +131,7 @@ class StructureNN(Module):
 class FNN(StructureNN):
     '''Fully connected neural networks.
     '''
-    def __init__(self, ind, outd, layers=2, width=50, activation='relu', initializer='default', outputlayer='None'):
+    def __init__(self, ind, outd, layers=2, width=50, activation='relu', initializer='default', outputlayer='None', bias=True):
         super(FNN, self).__init__()
         self.ind = ind
         self.outd = outd
@@ -140,6 +140,7 @@ class FNN(StructureNN):
         self.activation = activation
         self.initializer = initializer
         self.outputlayer = outputlayer
+        self.bias = bias
         
         self.modus = self.__init_modules()
         self.__initialize()
@@ -158,29 +159,34 @@ class FNN(StructureNN):
             x = F.relu(x)
         elif self.outputlayer == "sigmoid":
             x = F.sigmoid(x)
+        elif self.outputlayer == "tanh":
+            x = F.tanh(x)
         
         return x
     
     def __init_modules(self):
         modules = nn.ModuleDict()
         if self.layers > 1:
-            modules['LinM1'] = nn.Linear(self.ind, self.width)
+            modules['LinM1'] = nn.Linear(self.ind, self.width, bias=self.bias)
             modules['NonM1'] = self.Act
             for i in range(2, self.layers):
-                modules['LinM{}'.format(i)] = nn.Linear(self.width, self.width)
+                modules['LinM{}'.format(i)] = nn.Linear(self.width, self.width, bias=self.bias)
                 modules['NonM{}'.format(i)] = self.Act
-            modules['LinMout'] = nn.Linear(self.width, self.outd)
+            modules['LinMout'] = nn.Linear(self.width, self.outd, bias=self.bias)
         else:
-            modules['LinMout'] = nn.Linear(self.ind, self.outd)
+            modules['LinMout'] = nn.Linear(self.ind, self.outd, bias=self.bias)
             
         return modules
     
     def __initialize(self):
         for i in range(1, self.layers):
             self.weight_init_(self.modus['LinM{}'.format(i)].weight)
-            nn.init.constant_(self.modus['LinM{}'.format(i)].bias, 0)
+            if self.bias:
+                nn.init.constant_(self.modus['LinM{}'.format(i)].bias, 0)
+                
         self.weight_init_(self.modus['LinMout'].weight)
-        nn.init.constant_(self.modus['LinMout'].bias, 0)
+        if self.bias:
+            nn.init.constant_(self.modus['LinMout'].bias, 0)
     
     def update_params(self, theta):
         
@@ -488,6 +494,14 @@ def create_net(ind, outd, layers, width, activation, initializer, outputlayer, p
     net.update_params(params)
     return net
 
+
+def create_fno_net(ind, outd, layers, modes1, fc_dim, activation, params):
+    
+    net = FNO1d(modes1=modes1, layers=layers,
+                  fc_dim=fc_dim, in_dim=ind, out_dim=outd, activation=activation)
+    net.update_params(params)
+    return net
+
 # The eddy viscosity is 
 # mu_scale*Int[g(x - y; sigma) NN(y)]dy
 def net_eval(net, x, mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):
@@ -501,6 +515,7 @@ def net_eval(net, x, mu_scale=1.0, non_negative=False, filter_on=False, filter_s
         # the axis is 1
         n_f = len(x)//n_data
         for i in range(n_data):
+     
             mu[i*n_f:(i+1)*n_f] = scipy.ndimage.gaussian_filter1d(mu[i*n_f:(i+1)*n_f], filter_sigma, mode="nearest") 
             
     return mu * mu_scale
@@ -511,9 +526,16 @@ def nn_viscosity(net, x, mu_scale=1.0, non_negative=False, filter_on=False, filt
     mu = net_eval(x=x, net=net, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
     return mu
 
+# x is nx by n_feature matrix, which is the input for the neural network
+def fno_viscosity(net, x, mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):  
+    mu = net_eval(x=x[np.newaxis,...], net=net, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
+    return mu
+
+
 # def nn_flux(net, x,  mu_scale=1.0, non_negative=False, filter_on=False, filter_sigma=5.0, n_data=1):
-#     mu = nn_viscosity(net=net, x=x, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
-#     return mu*dq
+#     # flux = smooth(nn(x)) * mu_scale
+#     flux = net_eval(x=x, net=net, mu_scale=mu_scale, non_negative=False, filter_on=filter_on, filter_sigma=filter_sigma, n_data=n_data) 
+#     return flux
 
 
 
@@ -532,4 +554,177 @@ def nn_viscosity(net, x, mu_scale=1.0, non_negative=False, filter_on=False, filt
 #     return Dq, Ddq
 
 
+def compl_mul1d(a, b):
+    # (batch, in_channel, x ), (in_channel, out_channel, x) -> (batch, out_channel, x)
+    return torch.einsum("bix,iox->box", a, b)
 
+
+def compl_mul2d(a, b):
+    # (batch, in_channel, x,y,t ), (in_channel, out_channel, x,y,t) -> (batch, out_channel, x,y,t)
+    return torch.einsum("bixy,ioxy->boxy", a, b)
+
+
+def compl_mul3d(a, b):
+    return torch.einsum("bixyz,ioxyz->boxyz", a, b)
+
+################################################################
+# 1d fourier layer
+################################################################
+
+
+class SpectralConv1d(nn.Module):
+    def __init__(self, in_channels, out_channels, modes1):
+        super(SpectralConv1d, self).__init__()
+
+        """
+        1D Fourier layer. It does FFT, linear transform, and Inverse FFT.    
+        """
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        # Number of Fourier modes to multiply, at most floor(N/2) + 1
+        self.modes1 = modes1
+
+        self.scale = (1 / (in_channels*out_channels))
+        self.weights1 = nn.Parameter(
+            self.scale * torch.rand(in_channels, out_channels, self.modes1, dtype=torch.cfloat))
+
+    def forward(self, x):
+        batchsize = x.shape[0]
+        # Compute Fourier coeffcients up to factor of e^(- something constant)
+        x_ft = torch.fft.rfftn(x, dim=2)
+
+        # Multiply relevant Fourier modes
+        out_ft = torch.zeros(batchsize, self.in_channels,
+                             x.size(-1)//2 + 1, device=x.device, dtype=torch.cfloat)
+        out_ft[:, :, :self.modes1] = compl_mul1d(
+            x_ft[:, :, :self.modes1], self.weights1)
+
+        # Return to physical space
+        x = torch.fft.irfftn(out_ft, s=[x.size(-1)], dim=[2])
+        return x
+    
+class FNO1d(nn.Module):
+    def __init__(self, modes1,
+                 width=64, fc_dim=128,
+                 layers=None,
+                 in_dim=2, out_dim=1,
+                 activation='tanh'):
+        super(FNO1d, self).__init__()
+
+        """
+        The overall network. It contains 4 layers of the Fourier layer.
+        1. Lift the input to the desire channel dimension by self.fc0 .
+        2. 4 layers of the integral operators u' = (W + K)(u).
+            W defined by self.w; K defined by self.conv .
+        3. Project from the channel space to the output space by self.fc1 and self.fc2 .
+        
+        input: the solution of the coefficient function and locations (a(x, y), x, y)
+        input shape: (batchsize, x=s, c)
+        output: the solution 
+        output shape: (batchsize, x=s, 1)
+        """
+
+        self.modes1 = modes1
+        self.width = width
+
+        if layers is None:
+            self.layers = [width] * 4
+        else:
+            self.layers = layers
+        self.fc0 = nn.Linear(in_dim, layers[0])
+
+        self.sp_convs = nn.ModuleList([SpectralConv1d(
+            in_size, out_size, mode1_num)
+            for in_size, out_size, mode1_num
+            in zip(self.layers, self.layers[1:], self.modes1)])
+
+        self.ws = nn.ModuleList([nn.Conv1d(in_size, out_size, 1)
+                                 for in_size, out_size in zip(self.layers, self.layers[1:])])
+
+        self.fc1 = nn.Linear(layers[-1], fc_dim)
+        self.fc2 = nn.Linear(fc_dim, out_dim)
+        if activation == 'tanh':
+            self.activation = F.tanh
+        elif activation == 'gelu':
+            self.activation = F.gelu
+        elif activation == 'relu':
+            self.activation = F.relu_
+        elif activation == 'elu':
+            self.activation = F.elu_
+        else:
+            raise ValueError(f'{activation} is not supported')
+
+    def forward(self, x):
+        '''
+        Args:
+            - x : (batch size, x_grid, y_grid, 2)
+        Returns:
+            - x: (batch size, x_grid, y_grid, 1)
+        '''
+        length = len(self.ws)
+        batchsize = x.shape[0]
+        size_x = x.shape[1]
+
+        x = self.fc0(x)
+        x = x.permute(0, 2, 1)
+
+        for i, (speconv, w) in enumerate(zip(self.sp_convs, self.ws)):
+            x1 = speconv(x)
+            x2 = w(x.view(
+                batchsize, self.layers[i], -1)).view(batchsize, self.layers[i+1], size_x)
+            x = x1 + x2
+            if i != length - 1:
+                x = self.activation(x)
+        x = x.permute(0, 2, 1)
+        x = self.fc1(x)
+        x = self.activation(x)
+        x = self.fc2(x)
+        return x
+    
+    # todo
+    def update_params(self, theta):
+        theta = torch.from_numpy(theta)
+        index = 0
+        with torch.no_grad():
+            for p in self.parameters():
+                len_p = p.numel()
+
+                if torch.is_floating_point(p):
+                    print(len_p)
+                    p[:] = theta[index:index+len_p].reshape(p.shape)
+                    index += len_p
+
+                elif torch.is_complex(p):
+                    print(len_p)
+                    p[:] = torch.complex( theta[index:(index + len_p)] , theta[(index + len_p):(index + len_p * 2)]).reshape(p.shape)
+                    index += 2*len_p
+
+                else:
+                    print("Bad element type in FNO params")
+    
+            
+            
+
+        
+    def get_params(self):
+        theta = []
+        for p in self.parameters():
+            if torch.is_floating_point(p):
+                theta.extend(p.detach().numpy().flatten())
+       
+
+            elif torch.is_complex(p):
+                theta.extend(p.real.detach().numpy().flatten())
+                theta.extend(p.imag.detach().numpy().flatten())
+                
+            else:
+                print("Bad element type in FNO params")
+            
+        return np.array(theta)
+    
+def count_params(model):
+    num_param = 0
+    for p in model.parameters():
+        num_param += p.numel()
+    return num_param

@@ -20,10 +20,11 @@ import NeuralNet
 #########################################
 # Neural network information
 #########################################
-ind, outd, width = 3, 1, 5
+ind, outd, width = 3, 1, 10
 layers = 2
-activation, initializer, outputlayer = "sigmoid", "default", "sigmoid"
+activation, initializer, outputlayer = "sigmoid", "default", "tanh"
 mu_scale = 100.0
+flux_scale = 100.0
 non_negative = True
 filter_on = True
 filter_sigma = 5.0
@@ -31,7 +32,8 @@ filter_sigma = 5.0
 q_scale = 100
 dpv_scale = 10
 psi_scale = 100
-mu_low = 5.0
+u_scale = 100
+mu_low = 0.1
 
 def str_to_num(x):
     if x.find("p") == -1:
@@ -246,9 +248,9 @@ def nummodel_fft(permeability, beta1, beta2, q, psi, yy, res, k2, dealiasing_fil
     # all are at the cell center
     
     dq1, dq2 = gradient_fft(q[0, :], dy, 1, k2, dealiasing_filter), gradient_fft(q[1, :], dy, 1, k2, dealiasing_filter)
-    dpv = np.hstack((dq1 + beta1,dq2 + beta2)) / dpv_scale  
+    dpv = np.hstack((dq1 + beta1,dq2 + beta2))   
     
-    x = np.vstack((np.fabs(q).flatten()/q_scale, dpv, np.fabs(psi).flatten()/psi_scale)).T
+    x = np.vstack((np.fabs(q).flatten()/q_scale, dpv/dpv_scale, np.fabs(psi).flatten()/psi_scale)).T
     
     # x = np.vstack((dpv, np.fabs(psi).flatten()/psi_scale)).T
     
@@ -260,8 +262,29 @@ def nummodel_fft(permeability, beta1, beta2, q, psi, yy, res, k2, dealiasing_fil
     
     res[0, :] = gradient_fft(mu_c1 * (dq1 + beta1), dy, 1, k2, dealiasing_filter)
     res[1, :] = gradient_fft(mu_c2 * (dq2 + beta2), dy, 1, k2, dealiasing_filter)
+
     
     
+def nummodel_flux_fft(flux_model, beta1, beta2, q, psi, yy, res, k2, dealiasing_filter):
+    
+    dy = yy[1] - yy[0]
+    
+    # all are at the cell center
+    
+    dq1, dq2 = gradient_fft(q[0, :], dy, 1, k2, dealiasing_filter), gradient_fft(q[1, :], dy, 1, k2, dealiasing_filter)
+    dpv = np.hstack((dq1 + beta1, dq2 + beta2))   
+    
+    x = np.vstack((np.fabs(q).flatten()/q_scale, dpv/dpv_scale, np.fabs(psi).flatten()/psi_scale)).T
+    
+    
+    flux = flux_model(x = x)
+    flux_c1 = flux[0: len(yy)]
+    flux_c2 = flux[len(yy):]
+    
+    res[0, :] = gradient_fft(flux_c1, dy, 1, k2, dealiasing_filter)
+    res[1, :] = gradient_fft(flux_c2, dy, 1, k2, dealiasing_filter)
+    
+ 
 
     
 

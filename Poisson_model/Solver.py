@@ -13,7 +13,7 @@ import matplotlib.animation as animation
 import torch
 import sys
 sys.path.append('../Utility')
-from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c
+from Numerics import gradient_first_c2f, gradient_first_f2c, interpolate_f2c, gradient_first
 import NeuralNet
 
 
@@ -24,11 +24,14 @@ import NeuralNet
 ind, outd, width = 2, 1, 10
 layers = 2
 activation, initializer, outputlayer = "sigmoid", "default", "None"
-mu_scale = 2.0
+
 non_negative = True
-filter_on=True
+filter_on    = True
 filter_sigma = 5.0
 
+mu_scale     = 1.0
+flux_scale   = 1.0
+source_scale = 1.0
 
 
 def permeability_ref(x):
@@ -38,6 +41,22 @@ def D_permeability_ref(x):
     q, dq = x[:, 0], x[:, 1]
     return q/np.sqrt(q**2 + dq**2), dq/np.sqrt(q**2 + dq**2)
 
+def flux_ref(x):
+    q,  dq = x[:, 0], x[:, 1]
+    return np.sqrt(q**2 + dq**2)*dq 
+
+def source_ref(x):
+    q,  dq, ddq = x[:, 0], x[:, 1], x[:, 2]
+    return np.sqrt(q**2 + dq**2)*ddq + (q*dq+dq*ddq)*dq/np.sqrt(q**2 + dq**2)
+
+def source_ref_q(q, dy):
+    q_c,  dq_c = interpolate_f2c(q), gradient_first_f2c(q, dy)
+    flux_c = np.sqrt(q_c**2 + dq_c**2)*dq_c
+    source = np.copy(q)
+    source[1:-1] = gradient_first_f2c(flux_c, dy)
+    source[0] = source[1]
+    source[-1] = source[-2]
+    return source
 
     
 # the model is a function: q,t ->  M(q)
@@ -224,6 +243,16 @@ def nummodel_flux(flux, q, yy, res):
     M_c = flux(x = x)
     res[:] = gradient_first_c2f(M_c, dy)
 
+    
+def nummodel_source(source, q, yy, res):
+    
+    Ny = yy.size
+    dy = yy[1] - yy[0]
+    dq = gradient_first(q, dy)
+    ddq = gradient_first(dq, dy)
+    x = np.vstack((q, dq, ddq)).T
+    S_f = source(x = x)
+    res[:] = S_f[1:-1]
     
 def nummodel_jac(permeability, q, yy, res, V, exact = False, D_permeability = None):
     

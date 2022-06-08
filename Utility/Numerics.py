@@ -3,7 +3,6 @@ from scipy.fftpack import fft, ifft
 from scipy.sparse.linalg import spsolve
 from scipy import sparse
 # periodic boundary condition without end point
-
 # # extrapolate the gradient at the boundary
 def gradient_first(omega, dx, bc = "one-sided"):
     nx = len(omega)
@@ -18,8 +17,20 @@ def gradient_first(omega, dx, bc = "one-sided"):
         d_omega[nx-1] = (omega[nx-1] - omega[nx-2]) / (dx)
     return d_omega
 
-
-
+# periodic boundary condition without end point
+# # extrapolate the gradient at the boundary
+def gradient_second(omega, dx, bc = "one-sided"):
+    nx = len(omega)
+    dd_omega = np.copy(omega)
+    dd_omega[1:nx-1] = (omega[2:nx] + omega[0:nx-2] - 2*omega[1:nx-1]) / (dx**2)
+    
+    if bc == "periodic":
+        dd_omega[0] = (omega[1] + omega[nx-1] - 2*omega[0]) / (dx**2)
+        dd_omega[nx-1] = (omega[0] + omega[nx-2] - 2*omega[nx-1]) / (dx**2)
+    else: #one-sided gradient 
+        dd_omega[0] = dd_omega[1]
+        dd_omega[nx-1] = dd_omega[nx-2]
+    return dd_omega
 
 # compute gradient from face states to cell gradients, no boundary
 def gradient_first_f2c(omega, dx, bc = "None"):
