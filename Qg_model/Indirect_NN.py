@@ -32,7 +32,7 @@ from Numerics import interpolate_f2c, gradient_first_f2c
 # # Load Training data
 
 
-beta_rek_strs = [("1", "0p3"), ("2", "0p3"), ("3", "0p3"), ("1", "0p6"), ("2", "0p6"), ("3", "0p6")]
+beta_rek_strs = [("2", "0p3")]#, ("2", "0p3"), ("3", "0p3"), ("1", "0p6"), ("2", "0p6"), ("3", "0p6")]
 beta_reks = [ (str_to_num(beta_rek_strs[i][0]), str_to_num(beta_rek_strs[i][1])) for i in range(len(beta_rek_strs)) ]
 phy_params, q_mean, psi_mean, dpv_mean,  mu_mean, mu_mean_clip,  closure_mean, xx, force = load_data(beta_rek_strs = beta_rek_strs, beta_reks = beta_reks)
 
