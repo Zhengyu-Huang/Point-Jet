@@ -412,7 +412,7 @@ def UKI_Run(s_param, forward,
         opt_error = 0.5*np.dot((y_pred - ukiobj.y) , np.linalg.solve(ukiobj.Sigma_eta, (y_pred - ukiobj.y)))
         
         if i > 0 and opt_error > opt_errors[-1]:
-            ukiobj.gamma = np.maximum(0.25, ukiobj.gamma/2.0)
+            ukiobj.gamma = np.maximum(0.0625, ukiobj.gamma/2.0)
             decrease_step = 0
         else:
             decrease_step += 1

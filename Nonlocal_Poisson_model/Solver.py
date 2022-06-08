@@ -27,7 +27,7 @@ activation, initializer, outputlayer = "sigmoid", "default", "None"
 mu_scale = 2.0
 non_negative = True
 filter_on=True
-filter_sigma = 5.0
+# filter_sigma = 5.0
 
 
 

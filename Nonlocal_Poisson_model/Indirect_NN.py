@@ -79,7 +79,7 @@ xx, f, q, q_c, dq_c = np.zeros((n_data, Nx)), np.zeros((n_data, Nx)), np.zeros((
 GENERATE_DATA = True
 if GENERATE_DATA:
     delta = 0.2
-    permeability = lambda x : permeability_ref(x, delta/dx)
+    permeability = lambda x : permeability_ref(x, True, delta/dx)
     for i in range(n_data):
         xx[i, :], f[i, :], q[i, :], q_c[i, :], dq_c[i, :] = generate_data_helper(permeability, f_funcs[i], L=L, Nx=Nx)
         
@@ -122,11 +122,13 @@ def loss_aug(s_param, params):
     N_data, Nx = f.shape
     q_sol = np.zeros((N_data, Nx))
     
-    delta = params[0]
-    dx = xx[1] - xx[0]
+    delta = np.exp(params[0]) / (1 + np.exp(params[0]))
+    dx = xx[0,1] - xx[0,0]
     net =  NeuralNet.create_net(ind, outd, layers, width, activation, initializer, outputlayer,  params[1:])
+    
+#     print("eval loss:", delta/dx)
     nn_model = partial(NeuralNet.nn_viscosity, net=net, mu_scale=mu_scale, non_negative=non_negative, filter_on=filter_on, filter_sigma=delta/dx)
-    model = lambda q, xx, res : nummodel(nn_model, q, xx, res, delta)
+    model = lambda q, xx, res : nummodel(nn_model, q, xx, res)
     
     for i in range(N_data):
         _, t_data, q_data = explicit_solve(model, f[i, :], dbc, dt = dt, Nt = Nt, save_every = save_every, L = L)
@@ -168,7 +170,7 @@ class PoissonParam:
         self.N_theta = N_theta + 1
         
         
-        self.N_y = N_y + N_theta
+        self.N_y = N_y + self.N_theta
 
 
 # In[ ]:
