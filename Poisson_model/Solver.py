@@ -78,8 +78,18 @@ def explicit_solve(model, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1.0):
     res = np.zeros(Ny - 2)
 
     for i in range(1, Nt+1): 
+#         model(q, yy, res)
+#         q[1:Ny-1] += dt*(f[1:Ny-1] + res)
+        
+        
+        q_old = np.copy(q)
         model(q, yy, res)
         q[1:Ny-1] += dt*(f[1:Ny-1] + res)
+        
+        model(q, yy, res)
+        q[1:Ny-1] = q_old[1:Ny-1]/2 + q[1:Ny-1]/2  + dt/2*(f[1:Ny-1] + res)
+        
+        
         
         if i%save_every == 0:
             q_data[i//save_every, :] = q
@@ -133,14 +143,17 @@ def implicit_solve(model_jac, f, dbc, dt = 1.0, Nt = 1000, save_every = 1, L = 1
         V[0::3] += 1.0
         
         A = sparse.coo_matrix((V,(I,J)),shape=(Ny-2,Ny-2)).tocsc()
-        q[1:Ny-1] += spsolve(A, dt*(f[1:Ny-1] + res))
+        dq = spsolve(A, dt*(f[1:Ny-1] + res))
+        q[1:Ny-1] += dq
 
         
         if i%save_every == 0:
             q_data[i//save_every, :] = q
             t_data[i//save_every] = i*dt
             print(i, "max q: ", np.max(q), " L2 res: ", np.linalg.norm(f[1:Ny-1] + res))
-
+        if i == Nt:
+            print("error dq = ", np.linalg.norm(dq/dt))
+            
     return  yy, t_data, q_data
 
 
@@ -259,8 +272,10 @@ def nummodel_jac(permeability, q, yy, res, V, exact = False, D_permeability = No
     Ny = yy.size
     dy = yy[1] - yy[0]
     dq_c = gradient_first_f2c(q, dy)
-    q_c = interpolate_f2c(q) 
-    mu_c = permeability(q_c, dq_c)
+    q_c = interpolate_f2c(q)
+    x = np.vstack((q_c, dq_c)).T
+    mu_c = permeability(x = x)
+    
     # i -> i-1/2
     #   q: 0 ---- 1 ---- 2 ---- 3 ---- 4   ...   ---- Ny-2 ---- Ny-1
     # q_c:     0      1      2      3      ...             Ny-2
@@ -305,10 +320,14 @@ def generate_data_helper(permeability, f_func, L=1.0, Nx = 100):
     dbc = np.array([0.0, 0.0]) 
        
     model = lambda q, yy, res : nummodel(permeability, q, yy, res)
-    xx, t_data, q_data = explicit_solve(model, f, dbc, dt = 5.0e-6, Nt = 500000, save_every = 100000, L = L)
+    model_jac = lambda q, yy, res, V : nummodel_jac(permeability, q, yy, res, V, exact = False, D_permeability = None)
+    
+    
+    #xx, t_data, q_data = explicit_solve(model, f, dbc, dt = 5.0e-5, Nt = 5000, save_every = 1000, L = L)
+    xx, t_data, q_data = implicit_solve(model_jac, f, dbc, dt = 5.0e-3, Nt = 2000, save_every = 1000, L = L)
 
     
-    print("Last step increment is : ", np.linalg.norm(q_data[-1, :] - q_data[-2, :]), " last step is : ", np.linalg.norm(q_data[-1, :]))
+#     print("Last step increment is : ", np.linalg.norm(q_data[-1, :] - q_data[-2, :]), " last step is : ", np.linalg.norm(q_data[-1, :]))
     
     q = q_data[-1, :]
     q_c, dq_c = interpolate_f2c(q), gradient_first_f2c(q, dy)
